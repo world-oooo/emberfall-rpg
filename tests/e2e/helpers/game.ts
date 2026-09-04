@@ -111,14 +111,24 @@ export async function damageEnemy(page: Page, spawnId: string, amount = 999): Pr
  * reveal; keep confirming until the player leaves the interact state, which is when the box has closed.
  */
 export async function talkTo(page: Page, x: number, y: number, facing = 'ArrowUp'): Promise<void> {
-  await teleport(page, x, y);
-  await page.keyboard.press(facing);
-  await page.waitForTimeout(150);
-  await page.keyboard.press('KeyE');
+  const playerState = async (): Promise<string | null> => page.evaluate(() => window.__GAME_TEST__?.getPlayerState()?.state ?? null);
+
+  // Opening is retried, and only once the game reports an interaction target: key delivery latency varies
+  // between engines, and a press that lands before the target has been picked simply does nothing.
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    if ((await playerState()) === 'interact') break;
+    await teleport(page, x, y);
+    await page.keyboard.press(facing);
+    await page.waitForTimeout(160);
+    const target = await page.evaluate(() => window.__GAME_TEST__?.getActiveInteraction() ?? null);
+    if (!target) continue;
+    await page.keyboard.press('KeyE');
+    await page.waitForTimeout(220);
+  }
+
   for (let i = 0; i < 15; i += 1) {
     await page.waitForTimeout(250);
-    const state = await page.evaluate(() => window.__GAME_TEST__?.getPlayerState()?.state ?? null);
-    if (state !== 'interact') return;
+    if ((await playerState()) !== 'interact') return;
     await page.keyboard.press('Enter');
   }
 }
@@ -131,4 +141,23 @@ export async function clearModals(page: Page): Promise<void> {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(200);
   }
+}
+
+/**
+ * Interacts with whatever prop is at (x, y). Waits until the game reports an interaction target before
+ * pressing, because a press delivered before the target is picked is silently lost — which showed up as
+ * engine-specific flakiness rather than as a failure at the press itself.
+ */
+export async function interactAt(page: Page, x: number, y: number, facing = 'ArrowUp'): Promise<string | null> {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await teleport(page, x, y);
+    await page.keyboard.press(facing);
+    await page.waitForTimeout(160);
+    const target = await page.evaluate(() => window.__GAME_TEST__?.getActiveInteraction() ?? null);
+    if (!target) continue;
+    await page.keyboard.press('KeyE');
+    await page.waitForTimeout(320);
+    return target;
+  }
+  return null;
 }

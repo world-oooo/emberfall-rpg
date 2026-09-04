@@ -76,15 +76,16 @@ test('captures the playthrough baseline @shots', async ({ page, errorWatcher }) 
   await shot(page, 'shrine-entrance', 1200);
 
   // Brazier puzzle and the vault it opens.
-  for (const [x, y] of [[184, 624], [296, 624], [152, 412], [328, 412]] as [number, number][]) {
+  for (const [x, y] of [[184, 616], [296, 616], [152, 412], [328, 412]] as [number, number][]) {
     await teleport(page, x, y);
     await page.keyboard.press('ArrowUp');
     await page.waitForTimeout(150);
     await page.keyboard.press('KeyE');
     await page.waitForTimeout(350);
   }
-  await teleport(page, 296, 600);
-  await shot(page, 'braziers-lit');
+  // Framed so both entrance-hall braziers are in view, and settled long enough for the toast to clear.
+  await teleport(page, 240, 604);
+  await shot(page, 'braziers-lit', 2600);
   await teleport(page, 136, 480);
   await page.keyboard.press('ArrowUp');
   await page.waitForTimeout(150);

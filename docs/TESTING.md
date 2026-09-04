@@ -12,9 +12,23 @@ produce evidence rather than pass/fail results.
 | `npm run test:e2e` | Fifteen Playwright tests against the real WebGL canvas |
 | `npm run test:perf` | Measurement pass → `artifacts/measurements.md` |
 | `npm run test:shots` | Screenshot baseline → `artifacts/playthrough/*.png` |
+| `npm run test:matrix` | The whole game, start to Continue, at three viewports in Chromium and WebKit |
 
-`test:perf` and `test:shots` have their own configs and are excluded from the default run, because they are
-slow and assert almost nothing. They exist to produce numbers and images you can look at.
+`test:perf`, `test:shots` and `test:matrix` have their own configs and are excluded from the default run.
+The first two are slow and assert almost nothing; they exist to produce numbers and images you can look at.
+The third repeats the long story test six times and takes about five minutes.
+
+## Completion matrix
+
+`npm run test:matrix` plays the game from the main menu to Continue at 1366×768, 1440×900 and 1920×1080, in
+Chromium and WebKit. Each run also asserts that the canvas claims the window and that nothing makes the page
+itself scrollable. Firefox is not covered because that browser is not installed in this environment.
+
+Two things learned running it: a key press delivered before the game has picked an interaction target is
+silently lost, which showed up as engine-specific flakiness rather than as a failure at the press. The shared
+`interactAt` and `talkTo` helpers now wait for a target before pressing. And six full playthroughs back to
+back put the dev server under enough load that one map load exceeded a 30-second budget on WebKit, so that
+config allows a single retry.
 
 ## Browser suite
 

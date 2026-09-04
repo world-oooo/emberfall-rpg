@@ -319,7 +319,7 @@ test('lights the shrine braziers to open the vault and unbars the shortcut', asy
   await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('shrine');
 
   // Four cold braziers: two in the entrance hall, two in the lower hall.
-  for (const [x, y] of [[184, 624], [296, 624], [152, 412], [328, 412]] as [number, number][]) await use(x, y, 'ArrowUp');
+  for (const [x, y] of [[184, 616], [296, 616], [152, 412], [328, 412]] as [number, number][]) await use(x, y, 'ArrowUp');
   await expect.poll(async () => (await getSave(page)).flags?.['shrine.braziers_lit']).toBe(true);
 
   // The vault seal asks for the puzzle flag, not a key.

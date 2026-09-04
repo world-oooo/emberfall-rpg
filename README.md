@@ -45,9 +45,10 @@ npm run build
 npm run test:e2e
 ```
 
-Two further passes produce evidence rather than pass/fail results: `npm run test:perf` writes frame-time,
-viewport and transition measurements to `artifacts/measurements.md`, and `npm run test:shots` regenerates the
-screenshot baseline in `artifacts/playthrough/`.
+Three further passes run on demand: `npm run test:perf` writes frame-time, viewport and transition
+measurements to `artifacts/measurements.md`, `npm run test:shots` regenerates the screenshot baseline in
+`artifacts/playthrough/`, and `npm run test:matrix` plays the game start to finish at three viewports in
+Chromium and WebKit.
 
 See [docs/TESTING.md](docs/TESTING.md) for the acceptance coverage,
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the implementation map,
