@@ -6,7 +6,7 @@ import { CameraFollow } from '../core/CameraFollow';
 import { Display } from '../systems/DisplaySystem';
 import { gameEvents } from '../core/events';
 import { getSession, type GameSession, type InventoryEntry } from '../core/session';
-import { getDialogue, type DialogueNode, type DialogueOption } from '../data/dialogue';
+import { getDialogue, hasDialogue, type DialogueNode, type DialogueOption } from '../data/dialogue';
 import { getEnemy } from '../data/enemies';
 import { getItem } from '../data/items';
 import { rollLoot } from '../data/loot';
@@ -63,6 +63,7 @@ export class WorldScene extends Phaser.Scene {
   private debug: DebugOverlay | null = null;
   private gameOver = false;
   private bossMusicActive = false;
+  private shrineLit = false;
   private readonly saveSystem = new SaveSystem();
   private saveQueue: Promise<void> = Promise.resolve();
   private readonly unsubscribers: Array<() => void> = [];
@@ -201,9 +202,14 @@ export class WorldScene extends Phaser.Scene {
     this.transitions = new MapTransitionSystem(this);
 
     for (const object of this.loaded.objects.Interactables ?? []) {
-      if (object.type !== 'Seal') continue;
-      if (this.session.save.flags[propStr(object, 'openFlag', 'seal_open')]) this.openSealTiles(object);
+      if (object.type === 'Seal' && this.session.save.flags[propStr(object, 'openFlag', 'seal_open')]) this.openSealTiles(object);
+      if (object.type === 'Brazier' && this.session.save.flags[`brazier.${propStr(object, 'interactionId', object.name)}`]) {
+        this.showBrazierFlame(object.x, object.y);
+      }
     }
+
+    this.shrineLit = false;
+    if (this.session.save.flags['ending.relit_shrine']) this.lightVillageShrine(false);
 
     this.cameraZones.length = 0;
     for (const object of findObjects(this.loaded, 'Camera', 'CameraBounds')) {
@@ -314,6 +320,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private dialogueForNpc(npcId: string): DialogueNode {
+    // Everyone has something else to say once the Ember is burning again.
+    if (this.session.save.flags['ending.relit_shrine'] && hasDialogue(`${npcId}_after`)) return getDialogue(`${npcId}_after`);
     const idByNpc: Record<string, string> = {
       elder_hana: this.quests.getProgress('quest_sleeping_guardian').status === 'active' ? 'elder_hana_guardian' : 'elder_hana_start',
       master_ryo: 'master_ryo_hint',
@@ -328,7 +336,9 @@ export class WorldScene extends Phaser.Scene {
       id: dialogueId(`villager_${npcId}`),
       speakerId: npcId,
       portrait: `${npcId}_face`,
-      lines: ['The old shrine road feels different tonight. Keep your blade close.'],
+      lines: this.session.save.flags['ending.relit_shrine']
+        ? ['The shrine is lit. I had forgotten what this square looks like in the warm.']
+        : ['The old shrine road feels different tonight. Keep your blade close.'],
     };
   }
 
@@ -337,6 +347,10 @@ export class WorldScene extends Phaser.Scene {
     const text = propStr(object, 'text', 'Nothing stirs.');
     if (kind === 'seal') {
       this.useSeal(object);
+      return;
+    }
+    if (kind === 'brazier') {
+      this.lightBrazier(id, object);
       return;
     }
     if (id === 'ember_pedestal') {
@@ -364,6 +378,7 @@ export class WorldScene extends Phaser.Scene {
         return;
       }
       this.audio.playSfx('fire_light');
+      this.lightVillageShrine(true);
       return;
     }
     if (kind === 'savepoint') {
@@ -501,6 +516,9 @@ export class WorldScene extends Phaser.Scene {
       : Phaser.Math.Distance.Between(this.player.x, this.player.y, boss.x, boss.y) <= boss.def.aggroRange + 28;
 
     if (!inArena) {
+      // Leaving the arena (the east shortcut runs past it) has to give the camera back, or it stays clamped
+      // to the arena rectangle while the player walks away.
+      if (this.cameraZoneActive) this.releaseCameraZone();
       this.ui?.hideBoss();
       return;
     }
@@ -509,9 +527,9 @@ export class WorldScene extends Phaser.Scene {
       this.audio.playMusic('boss', { fadeOutMs: 150, fadeInMs: 200 });
       if (boss instanceof BossEnemy) boss.wake();
       else this.audio.playSfx('boss_roar');
-      if (zone) this.applyCameraZone(zone);
       this.cameras.main.flash(220, 40, 20, 30);
     }
+    if (zone && !this.cameraZoneActive) this.applyCameraZone(zone);
     this.ui?.showBoss(boss.def.name, boss.health.current, boss.health.max);
   }
 
@@ -642,6 +660,100 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /**
+   * The ending has to exist in the world, not only in an overlay. Once the Ember is home the village shrine
+   * burns: a pulsing warm glow, a small flame and drifting embers, restored on every later visit.
+   */
+  private lightVillageShrine(celebrate: boolean): void {
+    if (this.shrineLit || this.mapDef.id !== 'village') return;
+    const object = (this.loaded.objects.Interactables ?? []).find((entry) => propStr(entry, 'interactionId', entry.name) === 'shrine_ember');
+    if (!object) return;
+    this.shrineLit = true;
+    const x = Math.round(object.x);
+    const y = Math.round(object.y);
+    const depth = Depth.ActorBase + y;
+
+    const glow = this.add.ellipse(x, y - 4, 54, 34, 0xffb45c, 0.14).setBlendMode(Phaser.BlendModes.ADD).setDepth(depth - 3);
+    this.tweens.add({ targets: glow, scaleX: 1.14, scaleY: 1.14, alpha: 0.26, duration: 1500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+
+    const flame = this.add.particles(x, y - 6, Tex.fxParticleFire, {
+      frame: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      speedY: { min: -26, max: -12 },
+      speedX: { min: -5, max: 5 },
+      lifespan: { min: 620, max: 1150 },
+      frequency: 140,
+      quantity: 1,
+      scale: { start: 1, end: 0.35 },
+      alpha: { start: 0.95, end: 0 },
+    });
+    flame.setDepth(depth + 1);
+
+    // Embers drifting off the hill, so the change still reads from the square below.
+    const motes = this.add.particles(0, 0, Tex.fxParticleFire, {
+      frame: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      speedY: { min: -16, max: -5 },
+      speedX: { min: -9, max: 9 },
+      lifespan: { min: 1600, max: 3000 },
+      frequency: 520,
+      quantity: 1,
+      scale: { start: 0.85, end: 0.2 },
+      alpha: { start: 0.65, end: 0 },
+      emitZone: { type: 'random', source: new Phaser.Geom.Rectangle(x - 60, y - 24, 120, 90), quantity: 1 },
+    });
+    motes.setDepth(Depth.AbovePlayer - 1);
+
+    if (celebrate) {
+      this.combat.effectsLayer.bigSpark(x, y - 8);
+      this.combat.effectsLayer.levelUp(x, y - 4);
+      this.combat.effectsLayer.shake(true);
+      this.cameras.main.flash(520, 255, 200, 130);
+    }
+  }
+
+  /**
+   * Braziers are the map's one environmental puzzle. Each is an ordinary prop that remembers a flag; lighting
+   * every brazier of a puzzle sets the puzzle flag, which is what the vault seal asks for. No framework, just
+   * flags and a flame.
+   */
+  private lightBrazier(id: string, object: TiledObject | undefined): void {
+    if (!object) return;
+    const flag = `brazier.${id}`;
+    if (this.session.save.flags[flag]) return;
+    this.session.save.flags[flag] = true;
+    this.showBrazierFlame(object.x, object.y);
+    this.audio.playSfx('fire_light');
+    this.combat.effectsLayer.bigSpark(object.x, object.y - 10);
+
+    const puzzleId = propStr(object, 'puzzleId');
+    if (!puzzleId) return;
+    const group = (this.loaded.objects.Interactables ?? []).filter((entry) => propStr(entry, 'puzzleId') === puzzleId);
+    const lit = group.filter((entry) => this.session.save.flags[`brazier.${propStr(entry, 'interactionId', entry.name)}`]).length;
+    if (lit < group.length) {
+      this.ui?.showToast(`The brazier catches.  ${lit}/${group.length}`);
+      return;
+    }
+    this.session.save.flags['shrine.braziers_lit'] = true;
+    this.audio.playSfx('secret');
+    this.combat.effectsLayer.shake(true);
+    this.ui?.showToast('Four flames. Something heavy shifts in the west wall.');
+    void this.autosave();
+  }
+
+  /** Small permanent flame on a lit brazier, drawn on interaction and again on every later map load. */
+  private showBrazierFlame(x: number, y: number): void {
+    const flame = this.add.particles(Math.round(x), Math.round(y) - 9, Tex.fxParticleFire, {
+      frame: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      speedY: { min: -22, max: -9 },
+      speedX: { min: -4, max: 4 },
+      lifespan: { min: 420, max: 800 },
+      frequency: 170,
+      quantity: 1,
+      scale: { start: 0.9, end: 0.3 },
+      alpha: { start: 0.95, end: 0 },
+    });
+    flame.setDepth(Depth.ActorBase + y);
+  }
+
+  /**
    * A key-gated barrier. Opening it removes the collision and the tiles for good, recorded on a world flag
    * so a reload keeps the way open.
    */
@@ -650,7 +762,8 @@ export class WorldScene extends Phaser.Scene {
     const flag = propStr(object, 'openFlag', 'seal_open');
     if (this.session.save.flags[flag]) return;
     const required = propStr(object, 'requiredItem');
-    if (required && !this.inventory.has(required)) {
+    const requiredFlag = propStr(object, 'requiredFlag');
+    if ((required && !this.inventory.has(required)) || (requiredFlag && !this.session.save.flags[requiredFlag])) {
       this.ui?.showToast(propStr(object, 'lockedMessage', 'It is sealed.'));
       this.audio.playSfx('menu_cancel');
       return;

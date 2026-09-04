@@ -36,13 +36,18 @@ export function buildVillage(): string {
   // border of trees so nothing needs invisible walls
   m.treeBorder(['tree_round', 'tree_pine', 'tree_round', 'tree_leaning'], 1, (x, y) => y >= H - 2 && x >= 18 && x <= 22);
 
-  // shrine hill (top centre): stone platform + big torii + a dark "unlit" brazier spot made of stones
+  // Shrine hill (top centre). The village shrine is the emotional centre of the game, so it is an actual
+  // building on a dirt plateau: pagoda, torii approach, flanking lanterns, and the cold ember pedestal in
+  // front of the door. WorldScene lights that pedestal once the Ember is restored.
+  m.prop('house_red', 19, 2);
   m.prop('torii', 19, 9);
   m.prop('stone_pillar', 17, 4);
   m.prop('stone_pillar', 23, 4);
+  m.prop('lantern_red', 18, 5);
+  m.prop('lantern_red', 22, 5);
   m.prop('lantern_red', 17, 8);
   m.prop('lantern_red', 23, 8);
-  m.prop('rock_grey', 20, 3);
+  m.prop('stone_pillar', 20, 5);
   m.interactable('Shrine', 'shrine_ember', 20, 5, { text: 'The shrine is cold. The ember is gone.' });
   m.solid(20, 5);
   m.prop('tree_big_round', 12, 1);
@@ -99,9 +104,20 @@ export function buildVillage(): string {
     m.prop(m.b.pick(details), x, y);
   }
   // a few trees inside
-  for (const [x, y] of [[14, 22], [26, 24], [10, 25], [36, 4], [3, 3]] as [number, number][]) {
+  for (const [x, y] of [[14, 22], [26, 24], [10, 25], [3, 3]] as [number, number][]) {
     if (!roads[y]?.[x] && !roads[y + 1]?.[x]) m.prop(m.b.pick(['tree_round', 'tree_pine']), x, y);
   }
+
+  // Hidden grove (NE, behind the dojo): a ring of trees with a single gap to the south and a chest inside.
+  // Nothing gates it but curiosity, which is the whole point of a secret.
+  m.prop('tree_round', 33, 3);
+  m.prop('tree_pine', 35, 3);
+  m.prop('tree_round', 37, 3);
+  m.prop('tree_pine', 33, 5);
+  m.prop('tree_round', 37, 5);
+  m.chest('chest_village_grove', 35, 5, 'chest_coins_big');
+  m.prop('pebbles', 35, 7);
+  m.prop('pebbles', 36, 8);
 
   // south gate: torii + guard, exit door to the woods
   m.prop('torii', 19, 26);

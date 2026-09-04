@@ -298,3 +298,55 @@ test('completes the Ember quest, saves, reloads, and continues', async ({ page, 
   await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('village');
   await expect.poll(async () => (await getSave(page)).flags?.['ending.relit_shrine']).toBe(true);
 });
+
+test('lights the shrine braziers to open the vault and unbars the shortcut', async ({ page, errorWatcher }) => {
+  test.setTimeout(90_000);
+  void errorWatcher;
+
+  const use = async (x: number, y: number, facing: string): Promise<void> => {
+    await teleport(page, x, y);
+    await page.keyboard.press(facing);
+    await page.waitForTimeout(150);
+    await page.keyboard.press('KeyE');
+    await page.waitForTimeout(400);
+  };
+
+  await openGame(page);
+  await startNewGame(page);
+  await teleport(page, 328, 472);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('woods');
+  await teleport(page, 808, 80);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('shrine');
+
+  // Four cold braziers: two in the entrance hall, two in the lower hall.
+  for (const [x, y] of [[184, 624], [296, 624], [152, 412], [328, 412]] as [number, number][]) await use(x, y, 'ArrowUp');
+  await expect.poll(async () => (await getSave(page)).flags?.['shrine.braziers_lit']).toBe(true);
+
+  // The vault seal asks for the puzzle flag, not a key.
+  await use(136, 480, 'ArrowUp');
+  await expect.poll(async () => (await getSave(page)).flags?.['shrine.vault_open']).toBe(true);
+  await use(104, 480, 'ArrowLeft');
+  await expect.poll(async () => (await getSave(page)).inventory?.some((entry) => entry.itemId === 'heavy_blade')).toBe(true);
+
+  // The keepers' passage is barred from the arena side and drops back to the entrance hall.
+  await use(440, 64, 'ArrowDown');
+  await expect.poll(async () => (await getSave(page)).flags?.['shrine.shortcut_open']).toBe(true);
+  await teleport(page, 440, 300);
+  await page.waitForTimeout(400);
+  await expect.poll(async () => (await getPlayerState(page)).y).toBeGreaterThan(250);
+  await expect.poll(() => getCurrentMap(page)).toBe('shrine');
+});
+
+test('opens the hidden grove chest in the village', async ({ page, errorWatcher }) => {
+  void errorWatcher;
+
+  await openGame(page);
+  await startNewGame(page);
+  const coinsBefore = (await getSave(page)).player.coins;
+  await teleport(page, 568, 112);
+  await page.keyboard.press('ArrowUp');
+  await page.waitForTimeout(150);
+  await page.keyboard.press('KeyE');
+
+  await expect.poll(async () => (await getSave(page)).player.coins).toBeGreaterThan(coinsBefore);
+});

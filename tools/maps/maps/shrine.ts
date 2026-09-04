@@ -56,6 +56,13 @@ export function buildShrine(): string {
     { x: 19, y: 21, w: 3, h: 3 }, // lower hall -> bat gallery
     { x: 13, y: 12, w: 4, h: 3 }, // sealed stair -> arena
     { x: 13, y: 21, w: 4, h: 3 }, // lower hall -> sealed stair
+    // Keepers' passage: the east shortcut, barred at the top so it can only be opened from the arena.
+    { x: 25, y: 3, w: 4, h: 2 }, // arena -> passage head
+    { x: 27, y: 3, w: 2, h: 34 }, // the long drop down the east wall, one column clear of the bat gallery
+    { x: 19, y: 35, w: 10, h: 2 }, // passage -> entrance hall
+    // Keepers' vault: opened by the four braziers, not by a key.
+    { x: 4, y: 27, w: 3, h: 4 }, // the vault itself
+    { x: 7, y: 28, w: 1, h: 1 }, // its doorway, barred until the braziers burn
   ];
   const walkable = Array.from({ length: H }, () => Array.from({ length: W }, () => false));
   for (const room of [...rooms, ...corridors]) {
@@ -191,6 +198,44 @@ export function buildShrine(): string {
   m.below.set(15, 2, m.b.gid(INTERIOR, 74));
   m.solid(15, 2);
   m.cameraBounds('boss_arena', arena.x, arena.y, arena.w, arena.h);
+
+  // Keepers' passage. The bar is on the arena side, so the shortcut is a reward for having climbed the whole
+  // shrine rather than a way to skip it.
+  for (let x = 27; x <= 28; x += 1) {
+    m.below.set(x, 5, m.b.gid(DUNGEON, 44));
+    m.solid(x, 5);
+  }
+  m.interactable('Seal', 'shrine_shortcut', 27, 4, {
+    openFlag: 'shrine.shortcut_open',
+    openMessage: 'The bar lifts. A keepers stair runs all the way down.',
+    gateX: 27,
+    gateY: 5,
+    gateWidth: 2,
+  });
+  brazier(24, 3);
+
+  // Environmental puzzle: four cold braziers on the way up. Light them all and the keepers' vault opens.
+  // The braziers are ordinary props until lit, so the puzzle adds no framework beyond a flag per brazier.
+  for (const [i, [bx, by]] of ([[11, 37], [18, 37], [9, 24], [20, 24]] as [number, number][]).entries()) {
+    m.interactable('Brazier', `shrine_brazier_${i + 1}`, bx, by, {
+      puzzleId: 'shrine_braziers',
+      lockedMessage: 'Cold ash. The wick still has one night left in it.',
+    });
+  }
+  m.below.set(7, 28, m.b.gid(DUNGEON, 44));
+  m.solid(7, 28);
+  m.interactable('Seal', 'shrine_vault', 8, 28, {
+    requiredFlag: 'shrine.braziers_lit',
+    openFlag: 'shrine.vault_open',
+    lockedMessage: 'Sealed stone. Four cold braziers are cut into its face.',
+    openMessage: 'Four flames, one answer. The stone draws back.',
+    gateX: 7,
+    gateY: 28,
+    gateWidth: 1,
+  });
+  m.chest('chest_shrine_vault', 5, 29, 'chest_heavy_blade');
+  statue(4, 27);
+  m.sign('sign_shrine_braziers', 12, 36, 'Four braziers stand cold between the door and the stair.\nThe keepers lit every one before they climbed.');
 
   // Quest triggers and transitions. The guardian quest advances on the key pickup, the boss kill and the
   // ember, so it needs no area triggers of its own.

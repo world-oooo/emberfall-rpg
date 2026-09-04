@@ -22,6 +22,7 @@ const DEFAULT_PROMPTS: Record<InteractableKind, string> = {
   savepoint: 'Save',
   emberPedestal: 'Place',
   seal: 'Unseal',
+  brazier: 'Light',
 };
 
 export class MapInteractable implements Interactable {
@@ -55,8 +56,11 @@ export class MapInteractable implements Interactable {
     return this.promptText;
   }
 
-  canInteract(): boolean {
-    return true;
+  canInteract(ctx: InteractionContext): boolean {
+    // Some props are one-shot (a brazier you already lit). Once their flag is set they stop offering a prompt
+    // instead of repeating a "nothing happens" message.
+    const flag = this.data?.hideWhenFlag;
+    return !(typeof flag === 'string' && Boolean(ctx.session.save.flags[flag]));
   }
 
   interact(ctx: InteractionContext): void {

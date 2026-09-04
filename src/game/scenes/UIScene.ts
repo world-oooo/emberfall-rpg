@@ -139,8 +139,9 @@ export class UIScene extends Phaser.Scene {
     this.statPlate.setPosition(pad - 3, pad + 17);
     this.statsLabel.setPosition(pad + 13, pad + 21);
     this.coinIcon.setPosition(pad + 2, pad + 25);
-    this.questTitle.setPosition(this.w - pad, pad);
-    this.questLabel.setPosition(this.w - pad, pad + 11).setMaxWidth(150);
+    // The plate has rounded corners, so the text needs more inset on the right than the flat left edge.
+    this.questTitle.setPosition(this.w - pad - 3, pad);
+    this.questLabel.setPosition(this.w - pad - 3, pad + 11).setMaxWidth(150);
     this.positionHearts();
     this.refreshQuestPlate();
     if (this.bossHud) this.bossHud.setPosition(Math.round(this.w / 2 - 108), 10);
@@ -184,7 +185,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private refreshQuestPlate(): void {
-    const width = Math.max(this.questTitle.width, this.questLabel.width) + 12;
+    const width = Math.max(this.questTitle.width, this.questLabel.width) + 16;
     const height = (this.questLabel.text ? 24 : 14) + 3;
     this.questPlate.resize(width, height).setPosition(this.w - width - 4, 4);
   }

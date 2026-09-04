@@ -119,8 +119,23 @@ for (const [id, m] of maps) {
   const collision = m.layers.find((l) => l.name === 'Collision' && l.type === 'tilelayer');
   if (!collision?.data) continue;
 
+  // Seal gates are solid in the shipped map but open during play, so the fill has to pass through them or
+  // every room behind a seal reads as unreachable.
+  const openable = new Set<number>();
+  for (const layer of m.layers) {
+    if (layer.type !== 'objectgroup') continue;
+    for (const o of layer.objects ?? []) {
+      if (o.type !== 'Seal') continue;
+      const gx = Number(p(o, 'gateX') ?? -1);
+      const gy = Number(p(o, 'gateY') ?? -1);
+      const gw = Math.max(1, Number(p(o, 'gateWidth') ?? 1));
+      if (gx < 0 || gy < 0) continue;
+      for (let i = 0; i < gw; i += 1) openable.add(gy * width + gx + i);
+    }
+  }
+
   const blocked = (x: number, y: number): boolean =>
-    x < 0 || y < 0 || x >= width || y >= height || (collision.data?.[y * width + x] ?? 0) !== 0;
+    x < 0 || y < 0 || x >= width || y >= height || ((collision.data?.[y * width + x] ?? 0) !== 0 && !openable.has(y * width + x));
 
   const seen = new Set<number>();
   const queue: Array<[number, number]> = [];

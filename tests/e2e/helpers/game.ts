@@ -15,6 +15,7 @@ export interface GameSave {
     spawnId: string;
     hp: number;
     maxHp: number;
+    coins: number;
   };
   inventory?: Array<{ itemId: string; quantity: number }>;
   quests?: Record<string, { status: string; objectives: Record<string, number> }>;

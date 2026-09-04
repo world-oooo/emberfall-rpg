@@ -12,6 +12,7 @@ const KIND_BY_TILED_TYPE: Record<string, InteractableKind> = {
   Savepoint: 'savepoint',
   EmberPedestal: 'emberPedestal',
   Seal: 'seal',
+  Brazier: 'brazier',
 };
 
 export function createMapInteractables(
@@ -25,7 +26,8 @@ export function createMapInteractables(
     const kind = KIND_BY_TILED_TYPE[o.type];
     if (!kind) continue;
     const id = propStr(o, 'interactionId', o.name);
-    targets.push(new MapInteractable(scene, { id, kind, x: pointX(o), y: pointY(o), data: objectData(o) }, callbacks));
+    const data = kind === 'brazier' ? { ...objectData(o), hideWhenFlag: `brazier.${id}` } : objectData(o);
+    targets.push(new MapInteractable(scene, { id, kind, x: pointX(o), y: pointY(o), data }, callbacks));
   }
   for (const o of loaded.objects.Chests ?? []) {
     const chestId = propStr(o, 'chestId', o.name);
