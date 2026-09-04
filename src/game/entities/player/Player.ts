@@ -1,9 +1,16 @@
 import Phaser from 'phaser';
 import { Actor } from '../Actor';
 import { Anim, Tex } from '../../config/assets';
+import { Feel } from '../../config/constants';
+import { gameEvents } from '../../core/events';
 import { StateMachine } from '../../core/StateMachine';
+import type { DamageInfo } from '../../combat/Damage';
+import { Health } from '../../combat/Health';
+import { HitFeedback } from '../../combat/HitFeedback';
+import type { Hittable } from '../../combat/Hitbox';
 import type { InputActions } from '../../input/InputActions';
 import { FACING_VEC, facingFromVector, type Facing } from './heroAnimations';
+import { PlayerCombat } from './PlayerCombat';
 
 export type PlayerStateName = 'idle' | 'move' | 'attack' | 'roll' | 'hurt' | 'dead' | 'interact';
 
@@ -13,17 +20,25 @@ const STOP_RATE = 55;
 
 export interface PlayerConfig {
   facing?: Facing;
+  hp?: number;
+  maxHp?: number;
+  weaponId?: string | null;
+  accessoryId?: string | null;
 }
 
 /**
  * The hero. Movement lives here; combat actions are layered on in PlayerCombat (M3).
  * Body: 10x8 at the feet inside the 32x32 animation frame.
  */
-export class Player extends Actor {
+export class Player extends Actor implements Hittable {
+  readonly hitId = 'player';
   readonly fsm: StateMachine<Player, PlayerStateName>;
+  readonly health: Health;
+  readonly combat: PlayerCombat;
   facing: Facing;
   readonly moveDir = new Phaser.Math.Vector2();
   private readonly desiredVel = new Phaser.Math.Vector2();
+  private readonly hitFeedback: HitFeedback;
   /** Set by scene: current input snapshot. */
   input: InputActions | null = null;
   /** External systems can freeze the player (dialogue, cutscene). */
@@ -39,6 +54,19 @@ export class Player extends Actor {
     });
     this.facing = cfg.facing ?? 'down';
     this.sprite.setName('player');
+    this.health = new Health(cfg.maxHp ?? 6, cfg.hp ?? cfg.maxHp ?? 6);
+    this.hitFeedback = new HitFeedback(scene, this.sprite);
+    this.combat = new PlayerCombat(this, {
+      weaponId: cfg.weaponId ?? 'katana',
+      accessoryId: cfg.accessoryId ?? null,
+    });
+    this.health.addListener({
+      onDamaged: (_info, result) => {
+        gameEvents.emit('playerHealthChanged', { hp: this.health.current, maxHp: this.health.max });
+        if (result.killed) gameEvents.emit('playerDied', {});
+      },
+      onHealed: () => gameEvents.emit('playerHealthChanged', { hp: this.health.current, maxHp: this.health.max }),
+    });
     this.fsm = new StateMachine<Player, PlayerStateName>(this)
       .add('idle', {
         enter: (p) => p.playAnim('idle'),
@@ -55,7 +83,12 @@ export class Player extends Actor {
       .add('attack', {})
       .add('roll', {})
       .add('hurt', {})
-      .add('dead', {})
+      .add('dead', {
+        enter: (p) => {
+          p.body.velocity.set(0, 0);
+          p.sprite.play(Anim.heroDead, true);
+        },
+      })
       .add('interact', {
         enter: (p) => {
           p.playAnim('idle');
@@ -88,7 +121,8 @@ export class Player extends Actor {
   update(delta: number): void {
     const dt = delta / 1000;
     const input = this.input;
-    const canMove = !this.controlLocked && (this.fsm.is('idle') || this.fsm.is('move'));
+    this.combat.update(delta);
+    const canMove = !this.controlLocked && !this.hitFeedback.isKnockedBack && (this.fsm.is('idle') || this.fsm.is('move'));
 
     if (canMove && input && input.axis.lengthSq() > 0) {
       this.moveDir.copy(input.axis);
@@ -109,6 +143,32 @@ export class Player extends Actor {
     }
 
     this.fsm.update(delta);
+  }
+
+  takeHit(info: DamageInfo): boolean {
+    if (info.faction === 'player' || this.health.isDead) return false;
+    const now = this.scene.time.now;
+    const result = this.health.applyDamage(info, now, Feel.playerInvulnerable);
+    if (!result.applied) return false;
+    this.hitFeedback.flash(Feel.hitFlash);
+    this.hitFeedback.knockback(info, 180, 1);
+    this.hitFeedback.squash(0.12, 120);
+    if (result.killed) {
+      this.fsm.set('dead');
+      return true;
+    }
+    this.fsm.set('hurt');
+    this.playAnim('hit');
+    this.scene.time.delayedCall(260, () => {
+      if (!this.health.isDead && this.fsm.is('hurt')) this.fsm.set(this.input?.axis.lengthSq() ? 'move' : 'idle');
+    });
+    return true;
+  }
+
+  override destroy(): void {
+    this.hitFeedback.destroy();
+    this.combat.destroy();
+    super.destroy();
   }
 
   /** Called after physics so depth/shadow follow the resolved position. */

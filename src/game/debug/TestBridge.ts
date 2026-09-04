@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { hasSession, getSession } from '../core/session';
 import type { WorldScene } from '../scenes/WorldScene';
+import { SettingsStore, type Settings } from '../systems/SettingsStore';
 
 /**
  * DEV-only read-mostly API for Playwright: window.__GAME_TEST__.
@@ -15,9 +16,14 @@ export interface GameTestBridge {
   getSave: () => unknown;
   getInventory: () => unknown;
   getQuests: () => unknown;
+  getSettings: () => Settings;
   getEnemies: () => unknown[];
+  getActiveInteraction: () => string | null;
   startScene: (key: string, data?: object) => void;
   teleport: (x: number, y: number) => void;
+  damageEnemy: (spawnId: string, amount?: number) => boolean;
+  damagePlayer: (amount?: number) => boolean;
+  saveNow: () => Promise<void>;
 }
 
 export function installTestBridge(game: Phaser.Game): void {
@@ -39,9 +45,51 @@ export function installTestBridge(game: Phaser.Game): void {
     getSave: () => (hasSession() ? structuredClone(getSession().save) : null),
     getInventory: () => (hasSession() ? structuredClone(getSession().save.inventory) : null),
     getQuests: () => (hasSession() ? structuredClone(getSession().save.quests) : null),
-    getEnemies: () => [],
+    getSettings: () => structuredClone(SettingsStore.get()),
+    getEnemies: () => world()?.combat?.enemies.map((enemy) => ({
+      enemyId: enemy.def.id,
+      spawnId: enemy.spawnId,
+      hp: enemy.health.current,
+      maxHp: enemy.health.max,
+      x: enemy.x,
+      y: enemy.y,
+      dead: enemy.isDead,
+    })) ?? [],
+    getActiveInteraction: () => world()?.interactions?.getActive()?.id ?? null,
     startScene: (key, data) => game.scene.start(key, data),
-    teleport: (x, y) => world()?.player.setPosition(x, y),
+    teleport: (x, y) => {
+      const current = world();
+      current?.player.setPosition(x, y);
+      current?.player.body.velocity.set(0, 0);
+    },
+    damageEnemy: (spawnId, amount = 999) => {
+      const current = world();
+      const enemy = current?.getEnemyBySpawnId(spawnId);
+      if (!current || !enemy) return false;
+      return enemy.takeHit({
+        amount,
+        sourceX: current.player.x,
+        sourceY: current.player.y,
+        knockback: 0,
+        hitstop: 0,
+        faction: 'player',
+      });
+    },
+    damagePlayer: (amount = 999) => {
+      const current = world();
+      if (!current) return false;
+      return current.player.takeHit({
+        amount,
+        sourceX: current.player.x - 16,
+        sourceY: current.player.y,
+        knockback: 0,
+        hitstop: 0,
+        faction: 'enemy',
+      });
+    },
+    saveNow: async () => {
+      await world()?.autosave();
+    },
   };
   (window as unknown as { __GAME_TEST__: GameTestBridge }).__GAME_TEST__ = bridge;
   game.events.once('ready', () => {

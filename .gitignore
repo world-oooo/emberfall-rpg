@@ -29,3 +29,6 @@ vendor/
 # playwright mcp working files
 .playwright-mcp/
 .playwright-shots/
+
+# local OMX workflow state
+.omx/

@@ -43,7 +43,6 @@ body {
   outline: none;
 }
 
-/* Shown until the Phaser canvas boots; removed by main.ts. */
 #boot-fallback {
   position: absolute;
   inset: 0;

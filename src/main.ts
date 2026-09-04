@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import './style.css';
 import { gameConfig } from './game/config/gameConfig';
 import { installTestBridge } from './game/debug/TestBridge';
 

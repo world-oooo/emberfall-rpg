@@ -1,27 +1,29 @@
 # Tasks
 
-## In Progress
-- M1 — Playable movement: game config, scenes skeleton, input actions, player movement + animation, camera, test map.
-
-## Backlog
-- M2 — First world: map builder DSL, tileset curation/extrusion, village map, collision, spawn, layering, transitions.
-- M3 — Combat: Health/Damage/Hitbox, player attack (startup/active/recovery), hit feedback (flash, hitstop, knockback, shake, spark, SFX), slime.
-- M4 — Enemy variety: spore cap, bat, skeleton; balance pass.
-- M5 — Interaction: InteractionSystem, NPCs, dialogue box + data, chests, signs, doors, dojo dummy.
-- M6 — RPG systems: items, inventory UI, equipment, XP/levels, quests + quest log, shop.
-- M7 — Dungeon: shrine map, key/lock, boss arena, Tanuki Guardian, ember reward, ending beat.
-- M8 — Save: IndexedDB save/load, Continue, version + migration, persist(), export/import.
-- M9 — Presentation: HUD polish, pause/settings, audio mix, VFX pass, main menu art, loading screen.
-- M10 — Web robustness: resize/fullscreen/focus loss/tab hidden, keyboard capture, error screen.
-- M11 — QA: unit tests, Playwright e2e, screenshot review, performance check.
-- M12 — Vertical slice acceptance playthrough + README.
-- Later: gamepad UI navigation, Korean localization (data-only), PWA/offline, second dungeon (samurai crypt).
-
 ## Done
-- M0 — Environment audit, research (Phaser 4.2.1, official skills vendored to `.claude/skills/phaser-*`), asset pack downloaded and license verified (CC0), concept/architecture/art docs.
 
-## Known Issues
-- (none yet)
+- M0 — Environment audit, Phaser research, asset curation, CC0 license verification, concept and art direction.
+- M1 — Player movement, animation, camera and input actions.
+- M2 — Village, woods and shrine maps with collision, layering, spawns and transitions.
+- M3 — Melee and ranged combat, health, hitboxes, knockback, hit feedback and VFX.
+- M4 — Slime, spore cap, bat, skeleton and Tanuki Guardian encounters.
+- M5 — NPC dialogue, signs, chests, doors, shrine and contextual interaction prompts.
+- M6 — Inventory, consumables, equipment, XP/levels, quests, quest log and shop.
+- M7 — Shrine key/lock, boss arena, Ember reward, return journey and ending.
+- M8 — Versioned IndexedDB save/load, autosave, Continue and serialized transition saves.
+- M9 — HUD, pause/settings, audio mix, panels, portraits, boss bar, toasts and ending presentation.
+- M10 — Responsive canvas, focus-safe input, keyboard capture and WebGL startup handling.
+- M11 — Unit tests, Playwright browser tests, screenshot review and map validation.
+- M12 — Complete acceptance playthrough, production build and player documentation.
 
-## Polish
-- (collected during playtests)
+## Later
+
+- Gamepad UI navigation.
+- Korean localization.
+- PWA/offline caching.
+- Second dungeon: the Samurai Crypt.
+
+## Known limitations
+
+- The shipped boss is a focused vertical-slice encounter with a telegraphed heavy strike rather than the three-pattern prototype described in the original concept document.
+- Save export/import and a dedicated fullscreen toggle are not exposed in the current UI.

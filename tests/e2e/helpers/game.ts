@@ -1,0 +1,103 @@
+import { expect, type Page } from '../fixtures';
+
+export interface PlayerState {
+  x: number;
+  y: number;
+  facing: string;
+  state: string | null;
+  hp: number;
+  maxHp: number;
+}
+
+export interface GameSave {
+  player: {
+    mapId: string;
+    spawnId: string;
+    hp: number;
+    maxHp: number;
+  };
+  inventory?: Array<{ itemId: string; quantity: number }>;
+  quests?: Record<string, { status: string; objectives: Record<string, number> }>;
+  flags?: Record<string, boolean | number | string>;
+  defeatedBosses?: string[];
+}
+
+export interface EnemyState {
+  enemyId: string;
+  spawnId: string;
+  hp: number;
+  maxHp: number;
+  x: number;
+  y: number;
+  dead: boolean;
+}
+
+declare global {
+  interface Window {
+    __GAME_TEST__?: {
+      ready: boolean;
+      rendererType: () => 'webgl' | 'canvas' | 'unknown';
+      activeScenes: () => string[];
+      getPlayerState: () => PlayerState | null;
+      getCurrentMap: () => string | null;
+      getSave: () => GameSave | null;
+      getInventory: () => unknown;
+      getQuests: () => unknown;
+      getSettings: () => { masterVolume: number; musicVolume: number; sfxVolume: number; screenShake: boolean; integerScaling: boolean; showHints: boolean };
+      getEnemies: () => unknown[];
+      getActiveInteraction: () => string | null;
+      startScene: (key: string, data?: object) => void;
+      teleport: (x: number, y: number) => void;
+      damageEnemy: (spawnId: string, amount?: number) => boolean;
+      damagePlayer: (amount?: number) => boolean;
+      saveNow: () => Promise<void>;
+    };
+  }
+}
+
+export async function openGame(page: Page): Promise<void> {
+  await page.goto('/');
+  await page.waitForFunction(() => window.__GAME_TEST__?.ready === true);
+}
+
+export async function waitForScene(page: Page, sceneKey: string): Promise<void> {
+  await page.waitForFunction((key) => window.__GAME_TEST__?.activeScenes().includes(key), sceneKey);
+}
+
+export async function waitForMainMenu(page: Page): Promise<void> {
+  await waitForScene(page, 'MainMenuScene');
+}
+
+export async function startNewGame(page: Page): Promise<void> {
+  await waitForMainMenu(page);
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.__GAME_TEST__?.getCurrentMap() === 'village');
+}
+
+export async function getCurrentMap(page: Page): Promise<string | null> {
+  return page.evaluate(() => window.__GAME_TEST__?.getCurrentMap() ?? null);
+}
+
+export async function getPlayerState(page: Page): Promise<PlayerState> {
+  const state = await page.evaluate(() => window.__GAME_TEST__?.getPlayerState() ?? null);
+  expect(state).not.toBeNull();
+  return state as PlayerState;
+}
+
+export async function getSave(page: Page): Promise<GameSave> {
+  const save = await page.evaluate(() => window.__GAME_TEST__?.getSave() ?? null);
+  expect(save).not.toBeNull();
+  return save as GameSave;
+}
+
+export async function teleport(page: Page, x: number, y: number): Promise<void> {
+  await page.evaluate(({ targetX, targetY }) => window.__GAME_TEST__?.teleport(targetX, targetY), { targetX: x, targetY: y });
+}
+
+export async function getEnemies(page: Page): Promise<EnemyState[]> {
+  return page.evaluate(() => window.__GAME_TEST__?.getEnemies() as EnemyState[] ?? []);
+}
+
+export async function damageEnemy(page: Page, spawnId: string, amount = 999): Promise<boolean> {
+  return page.evaluate(({ id, damage }) => window.__GAME_TEST__?.damageEnemy(id, damage) ?? false, { id: spawnId, damage: amount });
+}

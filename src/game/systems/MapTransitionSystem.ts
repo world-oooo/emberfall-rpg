@@ -60,11 +60,9 @@ export class MapTransitionSystem {
     scene.player.body.velocity.set(0, 0);
     scene.sound.play(sfxKey('door'), { volume: 0.4 });
     scene.session.pendingSpawn = { mapId, spawnId };
-    scene.session.save.player.mapId = mapId;
-    scene.session.save.player.spawnId = spawnId;
     scene.cameras.main.fadeOut(260, 0, 0, 0);
     scene.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
-      scene.scene.restart({ mapId, spawnId });
+      void scene.saveForTransition(mapId, spawnId).finally(() => scene.scene.restart({ mapId, spawnId }));
     });
   }
 
