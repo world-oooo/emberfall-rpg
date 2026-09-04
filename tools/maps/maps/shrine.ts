@@ -1,67 +1,31 @@
 /**
- * Hollow Shrine — 30x40. Interior dungeon: entry hall, key side room, sealed door, boss arena, ember pedestal.
+ * Hollow Shrine — 30x40. Interior dungeon: entry hall, key side room, bat gallery, sealed stair, boss arena.
+ *
+ * The whole map starts as solid brick and the rooms are carved out of it. That gives every room a real wall
+ * mass instead of decorative frames floating on an open floor, and it means collision and visuals can never
+ * disagree: if a cell is not carved, it is both brick and solid.
  */
 import { SceneMap } from '../lib/scene.ts';
 import { rect } from '../lib/builder.ts';
 
 const FLOOR = 'TilesetInteriorFloor';
-const WALL = 'TilesetWallSimple';
-const INTERIOR = 'TilesetInterior';
 const DUNGEON = 'TilesetDungeon';
-const ELEMENT = 'TilesetElement';
+const INTERIOR = 'TilesetInterior';
 
-function fillLocal(m: SceneMap, layer: 'ground' | 'below' | 'above', tileset: string, local: number, x: number, y: number, w: number, h: number): void {
-  const target = m[layer];
-  const gid = m.b.gid(tileset, local);
-  for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) target.set(i, j, gid);
-}
+/** Plain orange brick used for the rock mass. */
+const BRICK = 185;
+/** Cold sage stone for walkable floor, with quiet variants so large rooms are not one flat colour. */
+const FLOOR_BASE = 253;
+const FLOOR_VARIANTS = [253, 253, 253, 253, 253, 253, 253, 231];
+/** Concentric ring that marks the centre of the guardian arena. */
+const FLOOR_RING = 193;
+const FLOOR_STAR = 256;
 
-function stamp(m: SceneMap, layer: 'groundDetail' | 'below' | 'above', tileset: string, x: number, y: number, block: number[][]): void {
-  m.b.stamp(m[layer], tileset, x, y, block);
-}
-
-function wall(m: SceneMap, x: number, y: number, w: number, h: number): void {
-  fillLocal(m, 'below', WALL, 25, x, y, w, h);
-  m.solid(x, y, w, h);
-}
-
-function pillar(m: SceneMap, x: number, y: number): void {
-  stamp(m, 'below', WALL, x, y, [
-    [25, 26],
-    [32, 33],
-  ]);
-  m.solid(x, y, 2, 2);
-}
-
-function statue(m: SceneMap, x: number, y: number, broken = false): void {
-  stamp(m, 'below', DUNGEON, x, y, [[broken ? 22 : 20]]);
-  m.solid(x, y);
-}
-
-function brazier(m: SceneMap, x: number, y: number): void {
-  stamp(m, 'below', DUNGEON, x, y, [[14]]);
-  m.solid(x, y);
-}
-
-function trim(m: SceneMap, x: number, y: number, w: number, h: number): void {
-  for (let i = x; i < x + w; i++) {
-    m.below.set(i, y, m.b.gid(INTERIOR, 90));
-    m.below.set(i, y + h - 1, m.b.gid(INTERIOR, 102));
-  }
-  for (let j = y; j < y + h; j++) {
-    m.below.set(x, j, m.b.gid(INTERIOR, 96));
-    m.below.set(x + w - 1, j, m.b.gid(INTERIOR, 98));
-  }
-}
-
-function crackScatter(m: SceneMap, rooms: boolean[][], count: number): void {
-  const cracks = [210, 211, 226, 227, 228, 229];
-  for (let i = 0; i < count; i++) {
-    const x = 2 + Math.floor(m.b.random() * (m.width - 4));
-    const y = 2 + Math.floor(m.b.random() * (m.height - 4));
-    if (!rooms[y]?.[x] || m.isSolid(x, y) || m.groundDetail.get(x, y) !== 0 || m.below.get(x, y) !== 0) continue;
-    m.groundDetail.set(x, y, m.b.gid(ELEMENT, m.b.pick(cracks)));
-  }
+interface Room {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export function buildShrine(): string {
@@ -72,116 +36,160 @@ export function buildShrine(): string {
   const W = m.width;
   const H = m.height;
 
-  fillLocal(m, 'ground', FLOOR, 124, 0, 0, W, H);
+  // 1. Solid rock everywhere.
+  const brickGid = m.b.gid(FLOOR, BRICK);
+  for (let y = 0; y < H; y += 1) for (let x = 0; x < W; x += 1) m.ground.set(x, y, brickGid);
+  m.solid(0, 0, W, H);
 
-  const rooms = Array.from({ length: H }, () => Array.from({ length: W }, () => false));
-  rect(rooms, 10, 31, 10, 8); // entrance
-  rect(rooms, 8, 23, 14, 10); // lower hall
-  rect(rooms, 3, 18, 9, 8); // key room
-  rect(rooms, 18, 17, 8, 8); // bat gallery
-  rect(rooms, 11, 10, 8, 12); // sealed stair
-  rect(rooms, 13, 21, 4, 3); // narrow connector into the sealed stair
-  rect(rooms, 5, 1, 20, 12); // boss arena
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!rooms[y]?.[x]) m.solid(x, y);
-
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      if (!rooms[y]?.[x]) continue;
-      const variant = (x + y) % 11 === 0 ? 125 : (x * 3 + y) % 17 === 0 ? 126 : 124;
-      m.ground.set(x, y, m.b.gid(FLOOR, variant));
+  // 2. Carve the rooms and corridors.
+  const rooms: Room[] = [
+    { x: 10, y: 31, w: 10, h: 8 }, // entrance hall
+    { x: 8, y: 23, w: 14, h: 8 }, // lower hall
+    { x: 3, y: 17, w: 9, h: 8 }, // key room
+    { x: 18, y: 16, w: 8, h: 8 }, // bat gallery
+    { x: 12, y: 14, w: 6, h: 8 }, // sealed stair
+    { x: 5, y: 1, w: 20, h: 12 }, // guardian arena
+  ];
+  const corridors: Room[] = [
+    { x: 13, y: 30, w: 4, h: 2 }, // entrance -> lower hall
+    { x: 11, y: 21, w: 3, h: 3 }, // lower hall -> key room
+    { x: 19, y: 21, w: 3, h: 3 }, // lower hall -> bat gallery
+    { x: 13, y: 12, w: 4, h: 3 }, // sealed stair -> arena
+    { x: 13, y: 21, w: 4, h: 3 }, // lower hall -> sealed stair
+  ];
+  const walkable = Array.from({ length: H }, () => Array.from({ length: W }, () => false));
+  for (const room of [...rooms, ...corridors]) {
+    rect(walkable, room.x, room.y, room.w, room.h);
+  }
+  for (let y = 0; y < H; y += 1) {
+    for (let x = 0; x < W; x += 1) {
+      if (!walkable[y]?.[x]) continue;
+      m.ground.set(x, y, m.b.gid(FLOOR, m.b.pick(FLOOR_VARIANTS)));
+      m.clearSolid(x, y);
+    }
+  }
+  // The doorway out to the woods stays open at the bottom.
+  for (let x = 13; x <= 16; x += 1) {
+    for (let y = 39; y <= 39; y += 1) {
+      m.ground.set(x, y, m.b.gid(FLOOR, FLOOR_BASE));
+      m.clearSolid(x, y);
     }
   }
 
-  trim(m, 10, 31, 10, 8);
-  trim(m, 8, 23, 14, 10);
-  trim(m, 3, 18, 9, 8);
-  trim(m, 18, 17, 8, 8);
-  trim(m, 11, 10, 8, 12);
-  trim(m, 5, 1, 20, 12);
+  const arena = rooms[5]!;
 
-  // Perimeter stone mass; leave the bottom doorway open.
-  wall(m, 0, 0, W, 1);
-  wall(m, 0, H - 1, 12, 1);
-  wall(m, 18, H - 1, 12, 1);
-  wall(m, 0, 0, 1, H);
-  wall(m, W - 1, 0, 1, H);
+  // 3. Arena floor motif so the climax room reads as a place, not a corridor.
+  const cx = arena.x + Math.floor(arena.w / 2);
+  const cy = arena.y + Math.floor(arena.h / 2);
+  m.ground.set(cx, cy, m.b.gid(FLOOR, FLOOR_RING));
+  for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as [number, number][]) {
+    m.ground.set(cx + dx, cy + dy, m.b.gid(FLOOR, FLOOR_STAR));
+  }
 
-  // Lower shrine pressure: narrow entry, broken statues, first skeletons.
-  wall(m, 8, 30, 3, 1);
-  wall(m, 19, 30, 3, 1);
-  wall(m, 7, 23, 1, 10);
-  wall(m, 22, 23, 1, 10);
-  statue(m, 9, 27, true);
-  statue(m, 20, 27, true);
-  brazier(m, 12, 29);
-  brazier(m, 17, 29);
+  // 4. Sparse floor detail. The previous pass scattered empty tiles that rendered as black holes; these are
+  // real cracked-stone tiles, kept rare so the floor still reads as one surface.
+  for (let i = 0; i < 26; i += 1) {
+    const x = 1 + Math.floor(m.b.random() * (W - 2));
+    const y = 1 + Math.floor(m.b.random() * (H - 2));
+    if (!walkable[y]?.[x] || m.isSolid(x, y)) continue;
+    if (x === cx && y === cy) continue;
+    m.ground.set(x, y, m.b.gid(FLOOR, m.b.pick([231, 231, 231, 256])));
+  }
+
+  // 5. Props. Braziers light the path; statues mark rooms and give the arena cover.
+  const brazier = (x: number, y: number): void => {
+    m.below.set(x, y, m.b.gid(DUNGEON, 41));
+    m.solid(x, y);
+  };
+  const statue = (x: number, y: number, broken = false): void => {
+    m.below.set(x, y, m.b.gid(DUNGEON, broken ? 43 : 27));
+    m.solid(x, y);
+  };
+  /** Two tiles tall so a column reads as a column rather than a brick patch on the floor. */
+  const pillar = (x: number, y: number): void => {
+    m.above.set(x, y - 1, m.b.gid(FLOOR, BRICK));
+    m.below.set(x, y, m.b.gid(FLOOR, BRICK));
+    m.solid(x, y);
+  };
+  const crate = (x: number, y: number): void => {
+    m.below.set(x, y, m.b.gid(DUNGEON, 14));
+    m.solid(x, y);
+  };
+
+  // Entrance hall: first light, a hint of what waits above.
+  brazier(11, 37);
+  brazier(18, 37);
+  crate(12, 33);
+  statue(17, 33, true);
+  m.sign('sign_shrine_entry', 15, 35, 'Hollow Shrine\nThe guardian sleeps at the top of the stair.');
+
+  // Lower hall: first shrine fight, pillars to break line of sight.
+  pillar(11, 26);
+  pillar(18, 26);
+  brazier(9, 24);
+  brazier(20, 24);
+  statue(9, 29, true);
+  statue(20, 29, true);
   m.enemy('skeleton', 12, 26, 'shrine_skeleton_01');
-  m.enemy('skeleton', 17, 24, 'shrine_skeleton_02');
+  m.enemy('skeleton', 17, 25, 'shrine_skeleton_02');
 
-  // Key side room: guarded but optional-looking, with the key chest at the far wall.
-  pillar(m, 4, 19);
-  pillar(m, 9, 19);
-  statue(m, 5, 24, true);
-  statue(m, 10, 24);
-  m.chest('chest_shrine_key', 7, 20, 'chest_shrine_key');
-  m.enemy('bat', 6, 23, 'shrine_bat_01');
-  m.enemy('skeleton', 9, 23, 'shrine_skeleton_03');
+  // Key room: the shrine key, guarded.
+  pillar(5, 19);
+  pillar(9, 19);
+  brazier(4, 18);
+  brazier(10, 18);
+  statue(6, 23);
+  m.chest('chest_shrine_key', 7, 19, 'chest_shrine_key');
+  m.enemy('bat', 6, 22, 'shrine_bat_01');
+  m.enemy('skeleton', 9, 22, 'shrine_skeleton_03');
 
-  // Bat gallery and reward room.
-  pillar(m, 19, 18);
-  pillar(m, 23, 18);
-  m.chest('chest_shrine_supplies', 22, 22, 'chest_potion');
-  m.enemy('bat', 20, 20, 'shrine_bat_02');
-  m.enemy('bat', 24, 22, 'shrine_bat_03');
+  // Bat gallery: airy room, supplies at the back.
+  pillar(20, 18);
+  pillar(24, 18);
+  brazier(19, 22);
+  brazier(25, 22);
+  m.chest('chest_shrine_supplies', 22, 21, 'chest_potion');
+  m.enemy('bat', 21, 19, 'shrine_bat_02');
+  m.enemy('bat', 24, 20, 'shrine_bat_03');
 
-  // Sealed ascent to the guardian.
-  wall(m, 10, 21, 3, 1);
-  wall(m, 17, 21, 3, 1);
-  wall(m, 10, 13, 3, 1);
-  wall(m, 17, 13, 3, 1);
-  pillar(m, 12, 16);
-  pillar(m, 16, 16);
-  brazier(m, 13, 12);
-  brazier(m, 16, 12);
+  // Sealed stair: the gate to the guardian.
+  brazier(13, 16);
+  brazier(16, 16);
+  statue(13, 19, true);
+  statue(16, 19, true);
+  m.enemy('skeleton', 15, 18, 'shrine_skeleton_04');
   m.door(13, 13, 4, 1, 'shrine', 'boss_gate', {
     locked: true,
     requiredItem: 'shrine_key',
     lockedMessage: 'A cold seal bars the way. The shrine key should fit here.',
   });
-  m.sign('sign_shrine_seal', 15, 14, 'The guardian sleeps beyond the sealed stair.');
-  m.enemy('skeleton', 14, 18, 'shrine_skeleton_04');
+  m.sign('sign_shrine_seal', 15, 15, 'The guardian sleeps beyond the sealed stair.');
 
-  // Guardian arena: 14x10 tiles, pillars as cover, ember pedestal at the back.
-  pillar(m, 7, 4);
-  pillar(m, 21, 4);
-  pillar(m, 7, 9);
-  pillar(m, 21, 9);
-  statue(m, 10, 2);
-  statue(m, 19, 2, true);
-  brazier(m, 11, 11);
-  brazier(m, 18, 11);
-  m.enemy('boss_racoon', 15, 7, 'guardian_tanuki', 'never', { boss: true, questId: 'quest_sleeping_guardian' });
-  m.interactable('Shrine', 'ember_pedestal', 15, 3, { text: 'The stolen ember waits here, warm enough to carry home.' });
-  m.solid(15, 3);
-  m.trigger('quest_sleeping_guardian', 'enter_boss_arena', 5, 1, 20, 12);
-  m.cameraBounds('boss_arena', 5, 1, 20, 12);
+  // Guardian arena: four pillars for cover, braziers along the back wall, ember pedestal behind the boss.
+  pillar(9, 4);
+  pillar(20, 4);
+  pillar(9, 9);
+  pillar(20, 9);
+  brazier(6, 2);
+  brazier(23, 2);
+  brazier(6, 11);
+  brazier(23, 11);
+  statue(12, 2);
+  statue(17, 2, true);
+  m.enemy('boss_racoon', 15, 6, 'guardian_tanuki', 'never', { boss: true, questId: 'quest_sleeping_guardian' });
+  m.interactable('Shrine', 'ember_pedestal', 15, 2, { text: 'The stolen ember waits here, warm enough to carry home.' });
+  m.below.set(15, 2, m.b.gid(INTERIOR, 74));
+  m.solid(15, 2);
+  m.trigger('quest_sleeping_guardian', 'enter_boss_arena', arena.x, arena.y, arena.w, arena.h);
+  m.cameraBounds('boss_arena', arena.x, arena.y, arena.w, arena.h);
 
-  crackScatter(m, rooms, 95);
-
-  // Subtle water/void-like damage-readability moat beside the entrance path.
-  const poison = Array.from({ length: H }, () => Array.from({ length: W }, () => false));
-  rect(poison, 2, 31, 4, 5);
-  rect(poison, 24, 30, 3, 6);
-  m.paintWater(poison, 'poison_on_brown');
-
-  m.trigger('quest_sleeping_guardian', 'find_shrine_key', 3, 18, 9, 8);
-  m.trigger('quest_dimmed_shrine', 'reach_shrine', 10, 32, 10, 5, false);
-
-  // Transition back to the woods; woods.ts already provides spawn "from_shrine".
+  // Quest triggers and transitions.
+  m.trigger('quest_sleeping_guardian', 'find_shrine_key', 3, 17, 9, 8);
+  m.trigger('quest_dimmed_shrine', 'reach_shrine', 10, 33, 10, 5, false);
   m.door(13, 39, 4, 1, 'woods', 'from_shrine');
-  m.spawn('entrance', 15, 36, 'up');
-  m.spawn('from_woods', 15, 36, 'up');
-  m.spawn('boss_gate', 15, 11, 'up');
+  m.spawn('entrance', 15, 37, 'up');
+  m.spawn('from_woods', 15, 37, 'up');
+  m.spawn('boss_gate', 15, 13, 'up');
 
   return m.write();
 }

@@ -102,6 +102,67 @@ for (const [id, m] of maps) {
   }
 }
 
+// ---- Reachability. A flood fill from every player spawn must reach every chest, NPC, door, sign and enemy
+// spawn. This catches level edits that seal a secret area or a quest item behind newly placed scenery.
+for (const [id, m] of maps) {
+  const width = (m as unknown as { width: number }).width;
+  const height = (m as unknown as { height: number }).height;
+  const tile = (m as unknown as { tilewidth: number }).tilewidth;
+  const collision = m.layers.find((l) => l.name === 'Collision' && l.type === 'tilelayer');
+  if (!collision?.data) continue;
+
+  const blocked = (x: number, y: number): boolean =>
+    x < 0 || y < 0 || x >= width || y >= height || (collision.data?.[y * width + x] ?? 0) !== 0;
+
+  const seen = new Set<number>();
+  const queue: Array<[number, number]> = [];
+  const push = (x: number, y: number): void => {
+    if (blocked(x, y)) return;
+    const key = y * width + x;
+    if (seen.has(key)) return;
+    seen.add(key);
+    queue.push([x, y]);
+  };
+  for (const layer of m.layers) {
+    if (layer.type !== 'objectgroup' || layer.name !== 'Spawns') continue;
+    for (const o of layer.objects ?? []) {
+      const ox = Math.floor(((o as unknown as { x: number }).x ?? 0) / tile);
+      const oy = Math.floor((((o as unknown as { y: number }).y ?? 0) - 1) / tile);
+      push(ox, oy);
+      push(ox, oy - 1);
+    }
+  }
+  while (queue.length) {
+    const [x, y] = queue.pop()!;
+    push(x + 1, y);
+    push(x - 1, y);
+    push(x, y + 1);
+    push(x, y - 1);
+  }
+
+  // An object counts as reachable if any of the four cells around it was flooded, since the object cell
+  // itself is usually solid (chests, NPCs and signs block movement).
+  const reachable = (px: number, py: number): boolean => {
+    const x = Math.floor(px / tile);
+    const y = Math.floor((py - 1) / tile);
+    const offsets: Array<[number, number]> = [[0, 0], [0, -1], [1, 0], [-1, 0], [0, 1], [1, -1], [-1, -1]];
+    for (const [dx, dy] of offsets) {
+      if (seen.has((y + dy) * width + (x + dx))) return true;
+    }
+    return false;
+  };
+  const mustReach = new Set(['Chest', 'NPC', 'Door', 'Sign', 'Shrine', 'Dummy', 'EnemySpawn', 'PlayerSpawn']);
+  for (const layer of m.layers) {
+    if (layer.type !== 'objectgroup') continue;
+    for (const o of layer.objects ?? []) {
+      if (!mustReach.has(o.type)) continue;
+      const ox = (o as unknown as { x: number }).x ?? 0;
+      const oy = (o as unknown as { y: number }).y ?? 0;
+      if (!reachable(ox, oy)) errors.push(`[${id}] unreachable ${o.type} "${o.name}" at ${Math.round(ox)},${Math.round(oy)}`);
+    }
+  }
+}
+
 if (errors.length) {
   console.error(`map validation failed (${errors.length}):`);
   for (const e of errors) console.error('  -', e);

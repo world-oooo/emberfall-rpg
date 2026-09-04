@@ -86,6 +86,42 @@ export class Effects {
     this.scene.tweens.add({ targets: t, y: t.y - 14, alpha: { from: 1, to: 0 }, duration: 600, ease: 'Cubic.easeOut', onComplete: () => t.destroy() });
   }
 
+  /**
+   * Warning marker drawn before an enemy commits to an attack. Shape and colour differ per attack so the
+   * player can tell a swipe from a charge without reading the sprite.
+   */
+  telegraph(x: number, y: number, kind: 'swipe' | 'charge' | 'burst' | 'strike'): void {
+    const graphics = this.scene.add.graphics().setDepth(Depth.ActorBase + y - 4);
+    const colour = kind === 'charge' ? 0xffb45c : kind === 'burst' ? 0xa9c8ff : 0xff7a5c;
+    const draw = (scale: number, alpha: number) => {
+      graphics.clear();
+      graphics.lineStyle(1, colour, alpha);
+      graphics.fillStyle(colour, alpha * 0.18);
+      if (kind === 'burst') {
+        graphics.strokeCircle(x, y, 26 * scale);
+        graphics.fillCircle(x, y, 26 * scale);
+      } else if (kind === 'charge') {
+        const w = 46 * scale;
+        graphics.strokeRect(x - w / 2, y - 7, w, 14);
+        graphics.fillRect(x - w / 2, y - 7, w, 14);
+      } else {
+        graphics.strokeCircle(x, y, 17 * scale);
+        graphics.fillCircle(x, y, 17 * scale);
+      }
+    };
+    draw(0.4, 0.9);
+    this.scene.tweens.addCounter({
+      from: 0,
+      to: 1,
+      duration: kind === 'charge' ? 520 : 420,
+      onUpdate: (tween) => {
+        const t = tween.getValue() ?? 0;
+        draw(0.4 + t * 0.75, 0.9 * (1 - t * 0.55));
+      },
+      onComplete: () => graphics.destroy(),
+    });
+  }
+
   shake(heavy = false): void {
     if (!SettingsStore.get().screenShake) return;
     this.scene.cameras.main.shake(heavy ? Feel.cameraShakeHeavy : Feel.cameraShakeLight, heavy ? 0.008 : 0.004);

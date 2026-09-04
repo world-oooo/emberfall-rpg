@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
 import { ASSET_ROOT, Tex, musicKey, sfxKey } from '../config/assets';
-import { GAME_HEIGHT, GAME_WIDTH } from '../config/constants';
+import { Display } from '../systems/DisplaySystem';
 import { startNewSession, type SaveGame } from '../core/session';
 import { InputActions } from '../input/InputActions';
 import { SaveSystem } from '../systems/SaveSystem';
 import { SettingsStore } from '../systems/SettingsStore';
 import { NinePanel } from '../ui/widgets/NinePanel';
+import { Plate } from '../ui/widgets/Plate';
 
 interface MenuEntry {
   label: string;
@@ -20,6 +21,7 @@ export class MainMenuScene extends Phaser.Scene {
   private cursor!: Phaser.GameObjects.Image;
   private index = 0;
   private busy = false;
+  private root: Phaser.GameObjects.Container | null = null;
   private continueSave: SaveGame | null = null;
   private settingsPanel: Phaser.GameObjects.Container | null = null;
   private settingsIndex = 0;
@@ -36,34 +38,70 @@ export class MainMenuScene extends Phaser.Scene {
 
   create(): void {
     this.busy = false;
-    this.cameras.main.setRoundPixels(true);
-    const cx = GAME_WIDTH / 2;
-    this.add.rectangle(cx, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x0b0a12);
-
-    const title = this.add.bitmapText(cx, 58, Tex.font, 'EMBERFALL', 24).setOrigin(0.5).setTint(0xf0b45a);
-    title.setLetterSpacing(3);
-    this.add.bitmapText(cx, 87, Tex.font, 'the ember of kagehara', 8).setOrigin(0.5).setTint(0x9a8f80);
-    this.add.bitmapText(cx, 103, Tex.font, 'a compact action rpg', 8).setOrigin(0.5).setTint(0x665d55);
-
+    Display.applyToCamera(this.cameras.main);
     this.entries = [
       { label: 'New Game', enabled: true, action: () => this.newGame() },
       { label: 'Continue', enabled: false, action: () => this.continueGame() },
       { label: 'Settings', enabled: true, action: () => this.openSettings() },
     ];
-    const panelW = 140;
-    const panelH = 16 + this.entries.length * 16;
-    new NinePanel(this, cx - panelW / 2, 124, panelW, panelH, Tex.panelDark);
-    this.labels = this.entries.map((entry, i) => this.add.bitmapText(cx, 132 + i * 16 + 4, Tex.font, entry.label, 8).setOrigin(0.5, 0).setTint(entry.enabled ? 0xf2ead8 : 0x6d6358));
-    this.cursor = this.add.image(cx - 52, 136, Tex.arrowRight).setOrigin(0.5);
-    this.add.bitmapText(cx, GAME_HEIGHT - 31, Tex.font, 'WASD/ARROWS MOVE   J ATTACK   K ROLL   E TALK', 8).setOrigin(0.5).setTint(0x74695f);
-    this.add.bitmapText(cx, GAME_HEIGHT - 21, Tex.font, 'I INVENTORY   Q QUESTS   ESC PAUSE', 8).setOrigin(0.5).setTint(0x61584f);
-    this.add.bitmapText(cx, GAME_HEIGHT - 11, Tex.font, 'ART: NINJA ADVENTURE BY PIXEL-BOY & AAA - CC0', 8).setOrigin(0.5).setTint(0x4d453d);
-
+    this.buildMenu();
     this.input2 = new InputActions(this);
     this.moveCursor(0);
     this.playTitleMusic();
     void this.loadContinueSlot();
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.input2.destroy());
+    const stopWatching = Display.onChange(() => {
+      Display.applyToCamera(this.cameras.main);
+      this.buildMenu();
+      this.moveCursor(0);
+    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      stopWatching();
+      this.input2.destroy();
+    });
+  }
+
+  /** Rebuilt whenever the window changes so the title block stays centred at any size. */
+  private buildMenu(): void {
+    this.root?.destroy(true);
+    const w = Display.width;
+    const h = Display.height;
+    const cx = Math.round(w / 2);
+    const items: Phaser.GameObjects.GameObject[] = [];
+    items.push(this.add.rectangle(0, 0, w, h, 0x0b0a12).setOrigin(0, 0));
+
+    // A soft ember glow behind the title gives the menu some depth without new art.
+    const glow = this.add.graphics();
+    glow.fillStyle(0x3a2416, 0.55);
+    glow.fillCircle(cx, Math.round(h * 0.3), Math.round(Math.min(w, h) * 0.38));
+    glow.fillStyle(0x5a3218, 0.4);
+    glow.fillCircle(cx, Math.round(h * 0.3), Math.round(Math.min(w, h) * 0.24));
+    items.push(glow);
+
+    const titleY = Math.round(h * 0.22);
+    const title = this.add.bitmapText(cx, titleY, Tex.font, 'EMBERFALL', 24).setOrigin(0.5).setTint(0xf0b45a);
+    title.setLetterSpacing(3);
+    items.push(title);
+    items.push(this.add.bitmapText(cx, titleY + 30, Tex.font, 'the ember of kagehara', 8).setOrigin(0.5).setTint(0x9a8f80));
+    items.push(this.add.bitmapText(cx, titleY + 46, Tex.font, 'a compact action rpg', 8).setOrigin(0.5).setTint(0x665d55));
+
+    const panelW = 148;
+    const panelH = 18 + this.entries.length * 17;
+    const panelY = Math.round(h * 0.52);
+    const menuFrame = new NinePanel(this, cx - panelW / 2, panelY, panelW, panelH, Tex.panelWood);
+    const menuInner = new Plate(this, panelW - 14, panelH - 14, { radius: 2, fill: 0x191621, alpha: 0.95 });
+    menuInner.setPosition(cx - panelW / 2 + 7, panelY + 7);
+    items.push(menuFrame, menuInner);
+    this.labels = this.entries.map((entry, i) =>
+      this.add.bitmapText(cx, panelY + 10 + i * 17, Tex.font, entry.label, 8).setOrigin(0.5, 0).setTint(entry.enabled ? 0xf2ead8 : 0x6d6358),
+    );
+    items.push(...this.labels);
+    this.cursor = this.add.image(cx - 55, panelY + 14, Tex.arrowRight).setOrigin(0.5);
+    items.push(this.cursor);
+
+    items.push(this.add.bitmapText(cx, h - 34, Tex.font, 'MOVE WASD   ATTACK J   ROLL K   THROW L', 8).setOrigin(0.5).setTint(0x74695f));
+    items.push(this.add.bitmapText(cx, h - 23, Tex.font, 'TALK E   BAG I   QUESTS Q   PAUSE ESC', 8).setOrigin(0.5).setTint(0x61584f));
+    items.push(this.add.bitmapText(cx, h - 12, Tex.font, 'ART: NINJA ADVENTURE - PIXEL-BOY & AAA', 8).setOrigin(0.5).setTint(0x4d453d));
+    this.root = this.add.container(0, 0, items);
   }
 
   override update(time: number): void {

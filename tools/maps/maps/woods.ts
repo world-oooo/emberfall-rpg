@@ -61,16 +61,33 @@ export function buildWoods(): string {
   rect(keep, 46, 5, 10, 7); // shrine forecourt
   rect(keep, 43, 28, 7, 5); // torii
 
-  // dense forest everywhere else (2-tile trees on an even grid, jittered)
+  // Dense forest everywhere else. Trees are 2x2, so a strict two-tile step made the canopy read as
+  // wallpaper; each trunk is nudged by up to one tile and clumped with a noise field so the wood has
+  // thickets and gaps instead of a grid.
   const kinds = ['tree_round', 'tree_pine', 'tree_round', 'tree_pine', 'tree_leaning', 'tree_dead'];
+  const occupied = grid(W, H);
+  const canPlace = (x: number, y: number, edge: boolean): boolean => {
+    for (let j = y; j <= y + 1; j += 1) {
+      for (let i = x; i <= x + 1; i += 1) {
+        if (i < 0 || j < 0 || i >= W || j >= H) return false;
+        if (occupied[j]?.[i]) return false;
+        if (road[j]?.[i]) return false;
+        if (!edge && keep[j]?.[i]) return false;
+      }
+    }
+    return true;
+  };
   for (let y = 0; y < H - 1; y += 2) {
     for (let x = 0; x < W - 1; x += 2) {
       const edge = x < 2 || y < 2 || x >= W - 2 || y >= H - 2;
-      const free = !keep[y]?.[x] && !keep[y]?.[x + 1] && !keep[y + 1]?.[x] && !keep[y + 1]?.[x + 1];
-      if (!free && !edge) continue;
-      if (edge && (road[y]?.[x] || road[y]?.[x + 1] || road[y + 1]?.[x] || road[y + 1]?.[x + 1])) continue;
-      if (!edge && m.b.random() < 0.3) continue;
-      m.prop(m.b.pick(kinds), x, y);
+      // Smooth noise creates thickets and clearings rather than an even sprinkle.
+      const density = 0.55 + 0.35 * Math.sin(x * 0.31 + y * 0.17) * Math.cos(y * 0.23 - x * 0.11);
+      if (!edge && m.b.random() > density) continue;
+      const jx = edge ? x : x + (m.b.random() < 0.5 ? 0 : 1);
+      const jy = edge ? y : y + (m.b.random() < 0.5 ? 0 : 1);
+      if (!canPlace(jx, jy, edge)) continue;
+      m.prop(m.b.pick(kinds), jx, jy);
+      rect(occupied, jx, jy, 2, 2);
     }
   }
   // secret grove wall: ring of trees with a one-tile gap at (12, 9)

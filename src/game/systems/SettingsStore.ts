@@ -5,7 +5,8 @@ export interface Settings {
   musicVolume: number;
   sfxVolume: number;
   screenShake: boolean;
-  integerScaling: boolean;
+  /** 'fill' uses the whole window at an integer zoom; 'fixed' frames a constant view and letterboxes. */
+  displayMode: 'fill' | 'fixed';
   showHints: boolean;
 }
 
@@ -14,7 +15,7 @@ const DEFAULTS: Settings = {
   musicVolume: 0.6,
   sfxVolume: 0.9,
   screenShake: true,
-  integerScaling: true,
+  displayMode: 'fill',
   showHints: true,
 };
 

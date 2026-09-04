@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
 import { CombatSystem } from '../combat/CombatSystem';
 import { ASSET_ROOT, Tex, enemyTexture, mapKey, musicKey, npcTexture } from '../config/assets';
-import { Depth } from '../config/constants';
+import { Depth, Feel } from '../config/constants';
 import { CameraFollow } from '../core/CameraFollow';
+import { Display } from '../systems/DisplaySystem';
 import { gameEvents } from '../core/events';
 import { getSession, type GameSession, type InventoryEntry } from '../core/session';
 import { getDialogue, type DialogueNode, type DialogueOption } from '../data/dialogue';
@@ -14,6 +15,7 @@ import { getQuest } from '../data/quests';
 import { DebugOverlay } from '../debug/DebugOverlay';
 import type { BaseEnemy } from '../entities/enemies/BaseEnemy';
 import { Npc } from '../entities/npcs/Npc';
+import { BossEnemy } from '../entities/enemies/BossEnemy';
 import { Player } from '../entities/player/Player';
 import type { Facing } from '../entities/player/heroAnimations';
 import { createMapInteractables, createNpcInteractable } from '../entities/props/createInteractables';
@@ -45,6 +47,9 @@ export class WorldScene extends Phaser.Scene {
   player!: Player;
   inputActions!: InputActions;
   cameraFollow!: CameraFollow;
+  private displayUnsubscribe: (() => void) | null = null;
+  private readonly cameraZones: Phaser.Geom.Rectangle[] = [];
+  private cameraZoneActive = false;
   combat!: CombatSystem;
   interactions!: InteractionSystem;
   inventory!: InventorySystem;
@@ -92,8 +97,14 @@ export class WorldScene extends Phaser.Scene {
     }
     for (const enemy of def.enemies) {
       if (this.textures.exists(enemyTexture(enemy))) continue;
-      if (enemy === 'boss_racoon') this.load.spritesheet(enemyTexture(enemy), 'enemies/boss_racoon_idle.png', { frameWidth: 60, frameHeight: 60 });
-      else this.load.spritesheet(enemyTexture(enemy), `enemies/${enemy}.png`, { frameWidth: 16, frameHeight: 16 });
+      if (enemy === 'boss_racoon') {
+        // The boss has four separate 60x60 sheets rather than one grid.
+        for (const clip of ['idle', 'charge', 'attack', 'jump'] as const) {
+          const key = `${enemyTexture(enemy)}_${clip}`;
+          if (!this.textures.exists(key)) this.load.spritesheet(key, `enemies/boss_racoon_${clip}.png`, { frameWidth: 60, frameHeight: 60 });
+        }
+        this.load.spritesheet(enemyTexture(enemy), 'enemies/boss_racoon_idle.png', { frameWidth: 60, frameHeight: 60 });
+      } else this.load.spritesheet(enemyTexture(enemy), `enemies/${enemy}.png`, { frameWidth: 16, frameHeight: 16 });
     }
     if (!this.cache.audio.exists(musicKey(def.music))) this.load.audio(musicKey(def.music), `audio/music/${def.music}.ogg`);
     if (def.id === 'shrine') {
@@ -106,7 +117,11 @@ export class WorldScene extends Phaser.Scene {
     this.loaded = loadTiledMap(this, mapKey(this.mapDef.id), this.mapDef.tilesets);
     this.physics.world.setBounds(0, 0, this.loaded.widthPx, this.loaded.heightPx);
     this.cameras.main.setBounds(0, 0, this.loaded.widthPx, this.loaded.heightPx);
-    this.cameras.main.setRoundPixels(true);
+    Display.applyToCamera(this.cameras.main);
+    this.displayUnsubscribe = Display.onChange(() => {
+      Display.applyToCamera(this.cameras.main);
+      this.cameraFollow?.snap();
+    });
 
     this.inventory = new InventorySystem(this.session.save);
     this.quests = new QuestSystem(this.session.save);
@@ -148,6 +163,19 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.combat = new CombatSystem(this, this.player);
+    this.registerBossAnimations();
+    this.combat.setBossWorld({
+      spawnHitbox: (config) => {
+        this.combat.spawnHitbox(config);
+      },
+      spawnProjectile: (x, y, vx, vy, damage) => this.spawnBossProjectile(x, y, vx, vy, damage),
+      telegraph: (x, y, kind) => this.combat.effectsLayer.telegraph(x, y, kind),
+      onPhaseChange: (phase) => {
+        if (phase === 2) this.ui?.showToast('The Mask Keeper sheds its calm.');
+      },
+      shake: (heavy) => this.combat.effectsLayer.shake(heavy),
+      sfx: (id, volume, detune) => this.combat.effectsLayer.sfx(id, volume ?? 1, detune ?? 0),
+    });
     this.combat.setWorldCollision(this.loaded.collision);
     const enemyObjects = findObjects(this.loaded, 'Enemies').filter((object) => {
       const enemyId = propStr(object, 'enemyId');
@@ -172,7 +200,14 @@ export class WorldScene extends Phaser.Scene {
     });
     this.transitions = new MapTransitionSystem(this);
 
+    this.cameraZones.length = 0;
+    for (const object of findObjects(this.loaded, 'Camera', 'CameraBounds')) {
+      this.cameraZones.push(new Phaser.Geom.Rectangle(object.x, object.y, object.width, object.height));
+    }
+    this.cameraZoneActive = false;
+
     this.cameraFollow = new CameraFollow(this.cameras.main, this.player.sprite);
+    this.cameraFollow.setLookAheadDistance(Feel.cameraLookAhead);
     this.cameraFollow.snap();
     this.cameraFollow.update(0);
     this.cameras.main.fadeIn(350, 0, 0, 0);
@@ -229,6 +264,11 @@ export class WorldScene extends Phaser.Scene {
     if (!this.player.controlLocked && !this.player.health.isDead) this.interactions.update();
     this.player.postUpdate();
     for (const npc of this.npcs) npc.syncDepth();
+    // Lead the camera in the direction of travel so the player sees more of where they are going.
+    const move = this.player.body.velocity;
+    const speed = Math.hypot(move.x, move.y);
+    if (speed > 12) this.cameraFollow.setLookAheadDirection(move.x / speed, move.y / speed);
+    else this.cameraFollow.setLookAheadDirection(0, 0);
     this.cameraFollow.update(delta);
     this.updateBossHud();
     this.debug?.update();
@@ -421,17 +461,46 @@ export class WorldScene extends Phaser.Scene {
     this.ui?.showEnding();
   }
 
+  /**
+   * Boss encounter framing. Entering the arena locks the camera to it, wakes the boss with its intro, and
+   * swaps the music, so the fight starts as an event rather than as another chase down a corridor.
+   */
   private updateBossHud(): void {
     const boss = this.combat.getLivingEnemies().find((enemy) => enemy.def.boss);
-    const closeEnough = boss && Phaser.Math.Distance.Between(this.player.x, this.player.y, boss.x, boss.y) <= boss.def.aggroRange + 28;
-    if (boss && closeEnough) {
-      if (!this.bossMusicActive) {
-        this.bossMusicActive = true;
-        this.audio.playMusic('boss');
-        this.audio.playSfx('boss_roar');
-      }
-      this.ui?.showBoss(boss.def.name, boss.health.current, boss.health.max);
-    } else this.ui?.hideBoss();
+    if (!boss) {
+      if (this.cameraZoneActive) this.releaseCameraZone();
+      this.ui?.hideBoss();
+      return;
+    }
+    const zone = this.cameraZones[0];
+    const inArena = zone
+      ? this.player.x >= zone.x && this.player.x <= zone.x + zone.width && this.player.y >= zone.y && this.player.y <= zone.y + zone.height
+      : Phaser.Math.Distance.Between(this.player.x, this.player.y, boss.x, boss.y) <= boss.def.aggroRange + 28;
+
+    if (!inArena) {
+      this.ui?.hideBoss();
+      return;
+    }
+    if (!this.bossMusicActive) {
+      this.bossMusicActive = true;
+      this.audio.playMusic('boss');
+      if (boss instanceof BossEnemy) boss.wake();
+      else this.audio.playSfx('boss_roar');
+      if (zone) this.applyCameraZone(zone);
+      this.cameras.main.flash(220, 40, 20, 30);
+    }
+    this.ui?.showBoss(boss.def.name, boss.health.current, boss.health.max);
+  }
+
+  private applyCameraZone(zone: Phaser.Geom.Rectangle): void {
+    this.cameraZoneActive = true;
+    this.cameras.main.setBounds(zone.x, zone.y, zone.width, zone.height);
+  }
+
+  private releaseCameraZone(): void {
+    if (!this.cameraZoneActive) return;
+    this.cameraZoneActive = false;
+    this.cameras.main.setBounds(0, 0, this.loaded.widthPx, this.loaded.heightPx);
   }
 
   private syncSaveFromPlayer(): void {
@@ -530,6 +599,58 @@ export class WorldScene extends Phaser.Scene {
     void this.autosave();
   }
 
+  /** Boss sheets are four separate strips, so the animations are built here once per map load. */
+  private registerBossAnimations(): void {
+    const base = enemyTexture('boss_racoon');
+    const clips: Array<{ name: 'idle' | 'charge' | 'attack' | 'jump'; frames: number; rate: number; repeat: number }> = [
+      { name: 'idle', frames: 6, rate: 7, repeat: -1 },
+      { name: 'charge', frames: 2, rate: 6, repeat: -1 },
+      { name: 'attack', frames: 4, rate: 12, repeat: 0 },
+      { name: 'jump', frames: 5, rate: 12, repeat: -1 },
+    ];
+    for (const clip of clips) {
+      const key = `boss_racoon_${clip.name}`;
+      const texture = `${base}_${clip.name}`;
+      if (this.anims.exists(key) || !this.textures.exists(texture)) continue;
+      this.anims.create({
+        key,
+        frames: this.anims.generateFrameNumbers(texture, { start: 0, end: clip.frames - 1 }),
+        frameRate: clip.rate,
+        repeat: clip.repeat,
+      });
+    }
+  }
+
+  /** Spirit orb fired by the boss burst. Dies on walls and after a short life so the arena never fills up. */
+  private spawnBossProjectile(x: number, y: number, vx: number, vy: number, damage: number): void {
+    const orb = this.physics.add.sprite(x, y, Tex.fxProjEnergy, 0).setDepth(Depth.AbovePlayer);
+    orb.play('proj_energy');
+    orb.setTint(0xa9c8ff);
+    orb.body?.setSize(9, 9);
+    orb.setVelocity(vx, vy);
+    const hitbox = this.combat.spawnHitbox({
+      x,
+      y,
+      width: 11,
+      height: 11,
+      faction: 'enemy',
+      damage,
+      knockback: 120,
+      hitstop: Feel.hitstopLight,
+      duration: 2600,
+      follow: { target: orb, offsetX: 0, offsetY: 0 },
+      tags: ['boss', 'projectile'],
+    });
+    const kill = () => {
+      if (!orb.active) return;
+      hitbox.done = true;
+      this.combat.effectsLayer.hitSpark(orb.x, orb.y);
+      orb.destroy();
+    };
+    if (this.loaded.collision) this.physics.add.collider(orb, this.loaded.collision, kill);
+    this.time.delayedCall(2500, kill);
+  }
+
   private throwShuriken(): void {
     if (!this.player.fsm.is('idle') && !this.player.fsm.is('move')) return;
     if (!this.inventory.has('shuriken')) {
@@ -566,6 +687,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private shutdownSystems(): void {
+    this.displayUnsubscribe?.();
+    this.displayUnsubscribe = null;
     this.ui?.hideBoss();
     for (const unsubscribe of this.unsubscribers.splice(0)) unsubscribe();
     this.transitions.destroy();

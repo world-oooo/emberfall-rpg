@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { getEnemy } from '../../data/enemies';
 import { propStr, type TiledObject } from '../../world/MapLoader';
 import { BaseEnemy } from './BaseEnemy';
+import { BossEnemy, type BossWorld } from './BossEnemy';
 
 export interface EnemySpawnInput {
   enemyId: string;
@@ -20,6 +21,8 @@ export function enemySpawnFromObject(obj: TiledObject): EnemySpawnInput {
   };
 }
 
-export function createEnemy(scene: Phaser.Scene, spawn: EnemySpawnInput): BaseEnemy {
-  return new BaseEnemy(scene, getEnemy(spawn.enemyId), spawn.spawnId, spawn.x, spawn.y);
+export function createEnemy(scene: Phaser.Scene, spawn: EnemySpawnInput, bossWorld?: BossWorld): BaseEnemy {
+  const definition = getEnemy(spawn.enemyId);
+  if (definition.boss && bossWorld) return new BossEnemy(scene, definition, spawn.spawnId, spawn.x, spawn.y, bossWorld);
+  return new BaseEnemy(scene, definition, spawn.spawnId, spawn.x, spawn.y);
 }

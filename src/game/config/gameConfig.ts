@@ -1,5 +1,4 @@
 import Phaser from 'phaser';
-import { GAME_HEIGHT, GAME_WIDTH } from './constants';
 import { CAPTURED_KEYS } from '../input/InputActions';
 import { BootScene } from '../scenes/BootScene';
 import { PreloadScene } from '../scenes/PreloadScene';
@@ -17,13 +16,13 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   pixelArt: true, // antialias off + roundPixels on
   disableContextMenu: true,
   scale: {
-    // NONE + MAX_ZOOM = the largest integer zoom that fits the window: every game pixel is a whole number of
-    // screen pixels. FIT would stretch to a fractional scale and shimmer. Re-evaluated on resize (see main.ts).
-    mode: Phaser.Scale.NONE,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: GAME_WIDTH,
-    height: GAME_HEIGHT,
-    zoom: Phaser.Scale.MAX_ZOOM,
+    // The canvas always matches the window; DisplaySystem picks an integer camera zoom for it. That keeps every
+    // game pixel a whole number of screen pixels while using the entire window, instead of scaling a fixed
+    // 480x270 canvas which fell back to 2x (under half the window) on any screen shorter than 810 px.
+    mode: Phaser.Scale.RESIZE,
+    width: '100%',
+    height: '100%',
+    parent: 'game-container',
   },
   physics: {
     default: 'arcade',

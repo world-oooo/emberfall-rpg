@@ -4,17 +4,26 @@ import type { Player } from '../entities/player/Player';
 import { Effects } from '../vfx/Effects';
 import type { TiledObject } from '../world/MapLoader';
 import { createEnemy, enemySpawnFromObject, type EnemySpawnInput } from '../entities/enemies/factory';
+import type { BossWorld } from '../entities/enemies/BossEnemy';
 import type { BaseEnemy } from '../entities/enemies/BaseEnemy';
 import { Hitbox, type HitboxConfig, type Hittable } from './Hitbox';
+import { HitStopController } from './HitStop';
 
 /**
  * Runtime glue for hitboxes and hittables. WorldScene can own one instance and call update(delta).
  */
 export class CombatSystem {
   readonly enemies: BaseEnemy[] = [];
+  readonly hitStop: HitStopController;
   private readonly hitboxes: Hitbox[] = [];
+  /** Bound once so the enemy loop does not allocate a closure per enemy per frame. */
+  private readonly enemyHitboxSink = (config: HitboxConfig): void => {
+    this.spawnHitbox(config);
+  };
   private readonly effects: Effects;
+
   private collisionLayer: Phaser.Tilemaps.TilemapLayer | null = null;
+  private bossWorld: BossWorld | null = null;
   private destroyed = false;
 
   constructor(
@@ -22,8 +31,14 @@ export class CombatSystem {
     private readonly player: Player,
   ) {
     this.effects = new Effects(scene);
+    this.hitStop = new HitStopController(scene);
     player.combat.setHitboxSink((config) => this.spawnHitbox(config));
     player.combat.setEffects(this.effects);
+  }
+
+  /** Shared one-shot effects, exposed so entity controllers can play telegraphs without owning a scene reference. */
+  get effectsLayer(): Effects {
+    return this.effects;
   }
 
   setWorldCollision(layer: Phaser.Tilemaps.TilemapLayer | null): void {
@@ -32,8 +47,14 @@ export class CombatSystem {
     for (const enemy of this.enemies) this.scene.physics.add.collider(enemy.sprite, layer);
   }
 
+  /** Supplies the hooks a boss controller needs. Must be set before boss spawns are created. */
+  setBossWorld(world: BossWorld): void {
+    this.bossWorld = world;
+  }
+
   spawnEnemy(spawn: EnemySpawnInput): BaseEnemy {
-    const enemy = createEnemy(this.scene, spawn);
+    const enemy = createEnemy(this.scene, spawn, this.bossWorld ?? undefined);
+    enemy.telegraphSink = (x, y, kind) => this.effects.telegraph(x, y, kind);
     this.enemies.push(enemy);
     this.scene.physics.add.collider(this.player.sprite, enemy.sprite);
     if (this.collisionLayer) this.scene.physics.add.collider(enemy.sprite, this.collisionLayer);
@@ -53,7 +74,18 @@ export class CombatSystem {
   update(delta: number): void {
     if (this.destroyed) return;
     const now = this.scene.time.now;
-    for (const enemy of this.enemies) enemy.update(delta, this.player, (config) => this.spawnHitbox(config));
+    for (const enemy of this.enemies) enemy.update(delta, this.player, this.enemyHitboxSink);
+    // Keep chasers from collapsing into one sprite. With at most a dozen enemies the pair loop is trivial.
+    for (let i = 0; i < this.enemies.length; i += 1) {
+      const a = this.enemies[i];
+      if (!a || a.isDead || a.isDestroyed) continue;
+      for (let j = i + 1; j < this.enemies.length; j += 1) {
+        const b = this.enemies[j];
+        if (!b || b.isDead || b.isDestroyed) continue;
+        a.separateFrom(b, delta);
+        b.separateFrom(a, delta);
+      }
+    }
     for (const hitbox of this.hitboxes) {
       hitbox.update(now);
       if (hitbox.faction === 'player') {
@@ -74,6 +106,7 @@ export class CombatSystem {
     this.destroyed = true;
     this.player.combat.setHitboxSink(null);
     this.player.combat.setEffects(null);
+    this.hitStop.destroy();
     for (const hitbox of this.hitboxes) hitbox.destroy();
     for (const enemy of this.enemies) enemy.destroy();
     this.hitboxes.length = 0;
@@ -84,16 +117,13 @@ export class CombatSystem {
     if (!this.overlaps(hitbox.body, target.body)) return;
     const applied = hitbox.tryHit(target, x, y);
     if (!applied) return;
-    this.effects.hitSpark(x, y);
-    this.effects.number(x, y, `-${hitbox.config.damage}`, hitbox.faction === 'player' ? 0xfff0a6 : 0xff8f8f);
-    this.effects.shake(hitbox.config.heavy);
-    this.effects.sfx(hitbox.config.heavy ? 'hit_heavy' : 'hit', 0.8);
-    if (hitbox.config.hitstop > 0) this.scene.physics.world.timeScale = 0.08;
-    if (hitbox.config.hitstop > 0) {
-      this.scene.time.delayedCall(Math.min(hitbox.config.hitstop, Feel.hitstopHeavy), () => {
-        this.scene.physics.world.timeScale = 1;
-      });
-    }
+    const heavy = Boolean(hitbox.config.heavy);
+    if (heavy) this.effects.bigSpark(x, y);
+    else this.effects.hitSpark(x, y);
+    this.effects.number(x, y, `${hitbox.config.damage}`, hitbox.faction === 'player' ? 0xfff0a6 : 0xff8f8f);
+    this.effects.shake(heavy);
+    this.effects.sfx(heavy ? 'hit_heavy' : 'hit', 0.8, heavy ? -120 : 0);
+    this.hitStop.request(Math.min(hitbox.config.hitstop, Feel.hitstopBoss));
   }
 
   private overlaps(a: Phaser.Physics.Arcade.Body, b: Phaser.Physics.Arcade.Body): boolean {

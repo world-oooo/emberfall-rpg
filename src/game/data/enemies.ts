@@ -86,15 +86,17 @@ export const ENEMIES: Record<string, EnemyDefinition> = {
   boss_racoon: {
     id: 'boss_racoon',
     name: 'Mask Keeper',
-    hp: 26,
-    speed: 64,
-    body: { width: 18, height: 12, offsetX: 21, offsetY: 42 },
-    aggroRange: 160,
-    leashRange: 230,
+    // Health is sized for a 90-150 second fight against a player who reads the telegraphs; BossEnemy owns
+    // the attack timings, so the values below are only used for movement speed and the reward.
+    hp: 42,
+    speed: 58,
+    body: { width: 22, height: 14, offsetX: 19, offsetY: 40 },
+    aggroRange: 200,
+    leashRange: 400,
     behavior: 'boss',
-    xp: 25,
+    xp: 40,
     texture: enemyTexture('boss_racoon'),
-    attack: { damage: 2, knockback: 160, hitstop: 70, range: 34, cooldown: 980, windup: 360, active: 190, width: 42, height: 30 },
+    attack: { damage: 1, knockback: 170, hitstop: 90, range: 40, cooldown: 1100, windup: 460, active: 160, width: 46, height: 34 },
     boss: true,
   },
 };

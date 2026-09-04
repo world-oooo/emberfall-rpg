@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import './style.css';
 import { gameConfig } from './game/config/gameConfig';
 import { installTestBridge } from './game/debug/TestBridge';
+import { Display } from './game/systems/DisplaySystem';
+import { SettingsStore } from './game/systems/SettingsStore';
 
 function showFatal(message: string): void {
   const el = document.getElementById('boot-fallback');
@@ -20,15 +22,8 @@ function boot(): void {
       if (fallback) fallback.hidden = true;
     });
     if (import.meta.env.DEV) installTestBridge(game);
-    // NONE + MAX_ZOOM only evaluates the zoom at boot; re-apply the largest integer zoom whenever the window changes.
-    let resizeTimer = 0;
-    const applyZoom = () => game.scale.setMaxZoom();
-    window.addEventListener('resize', () => {
-      window.clearTimeout(resizeTimer);
-      resizeTimer = window.setTimeout(applyZoom, 80);
-    });
-    game.scale.on(Phaser.Scale.Events.ENTER_FULLSCREEN, applyZoom);
-    game.scale.on(Phaser.Scale.Events.LEAVE_FULLSCREEN, applyZoom);
+    SettingsStore.load();
+    Display.attach(game);
     window.addEventListener('error', (e) => {
       // Surface uncaught errors visibly instead of a silent black canvas (dev only text; production shows a generic line).
       showFatal(import.meta.env.DEV ? String(e.message) : 'Something went wrong. Reload the page.');

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
-import { Tex, sfxKey } from '../config/assets';
-import { Depth, GAME_HEIGHT, GAME_WIDTH } from '../config/constants';
+import { Tex, itemTexture, sfxKey } from '../config/assets';
+import { Depth } from '../config/constants';
 import { gameEvents } from '../core/events';
 import { getSession, hasSession } from '../core/session';
 import type { DialogueNode, DialogueOption } from '../data/dialogue';
@@ -8,7 +8,9 @@ import { getItem } from '../data/items';
 import { QUESTS } from '../data/quests';
 import { InputActions } from '../input/InputActions';
 import { SettingsStore } from '../systems/SettingsStore';
-import { NinePanel } from '../ui/widgets/NinePanel';
+import { Display } from '../systems/DisplaySystem';
+import { NinePanel, UiColor } from '../ui/widgets/NinePanel';
+import { Plate } from '../ui/widgets/Plate';
 import type { WorldScene } from './WorldScene';
 
 type PanelKind = 'inventory' | 'quests' | 'pause' | 'shop';
@@ -25,19 +27,32 @@ interface DialogueCallbacks {
   onClose?: () => void;
 }
 
-/** Persistent overlay scene: HUD plus every modal surface used by the vertical slice. */
+/**
+ * Persistent overlay scene: HUD plus every modal surface.
+ *
+ * Everything is laid out from `Display.width/height` rather than fixed constants, because the canvas now
+ * fills the browser window and the logical size changes with it. `layout()` re-runs whenever the display
+ * changes, so the HUD stays anchored to the real corners at any window size.
+ */
 export class UIScene extends Phaser.Scene {
+  private hud!: Phaser.GameObjects.Container;
   private hearts: Phaser.GameObjects.Image[] = [];
-  private mapLabel!: Phaser.GameObjects.BitmapText;
+  private heartPlate!: Plate;
+  private statPlate!: Plate;
   private statsLabel!: Phaser.GameObjects.BitmapText;
+  private coinIcon!: Phaser.GameObjects.Image;
+  private questPlate!: Plate;
+  private questTitle!: Phaser.GameObjects.BitmapText;
   private questLabel!: Phaser.GameObjects.BitmapText;
-  private banner: Phaser.GameObjects.BitmapText | null = null;
+  private banner: Phaser.GameObjects.Container | null = null;
   private toast: Phaser.GameObjects.Container | null = null;
   private inputActions!: InputActions;
+
   private panel: Phaser.GameObjects.Container | null = null;
   private panelKind: PanelKind | null = null;
   private settingIndex = 0;
   private listIndex = 0;
+
   private dialogue: Phaser.GameObjects.Container | null = null;
   private dialogueNode: DialogueNode | null = null;
   private dialogueLine = 0;
@@ -45,24 +60,38 @@ export class UIScene extends Phaser.Scene {
   private dialogueCallbacks: DialogueCallbacks = {};
   private dialogueBody: Phaser.GameObjects.BitmapText | null = null;
   private dialogueChoices: Phaser.GameObjects.BitmapText | null = null;
+  private dialogueReveal = 0;
+  private dialogueFullText = '';
+
   private special: Phaser.GameObjects.Container | null = null;
   private specialAction: (() => void) | null = null;
   private modalReadyAt = 0;
+
   private bossHud: Phaser.GameObjects.Container | null = null;
   private bossName: Phaser.GameObjects.BitmapText | null = null;
   private bossFill: Phaser.GameObjects.Rectangle | null = null;
+  private bossTrail: Phaser.GameObjects.Rectangle | null = null;
+  private bossRatio = 1;
+
   private readonly unsubscribers: Array<() => void> = [];
 
   constructor() {
     super('UIScene');
   }
 
+  private get w(): number {
+    return Display.width;
+  }
+
+  private get h(): number {
+    return Display.height;
+  }
+
   create(): void {
-    this.cameras.main.setRoundPixels(true);
+    Display.applyToCamera(this.cameras.main);
     this.inputActions = new InputActions(this);
-    this.mapLabel = this.add.bitmapText(8, 20, Tex.font, '', 8).setTint(0xd9d2c5).setDepth(Depth.UI).setAlpha(0.85);
-    this.statsLabel = this.add.bitmapText(8, 31, Tex.font, '', 8).setTint(0xf0b45a).setDepth(Depth.UI).setAlpha(0.9);
-    this.questLabel = this.add.bitmapText(GAME_WIDTH - 8, 8, Tex.font, '', 8).setOrigin(1, 0).setTint(0xf2ead8).setDepth(Depth.UI).setMaxWidth(214);
+    this.buildHud();
+    this.layout();
     this.refreshAll();
 
     this.unsubscribers.push(
@@ -71,6 +100,11 @@ export class UIScene extends Phaser.Scene {
       gameEvents.on('xpChanged', () => this.refreshAll()),
       gameEvents.on('questUpdated', () => this.refreshAll()),
       gameEvents.on('toast', ({ text }) => this.showToast(text)),
+      Display.onChange(() => {
+        Display.applyToCamera(this.cameras.main);
+        this.layout();
+        this.rebuildOpenSurfaces();
+      }),
     );
     this.events.on(Phaser.Scenes.Events.WAKE, this.refreshAll, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -80,20 +114,76 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
+  // ---------------------------------------------------------------- HUD
+
+  private buildHud(): void {
+    this.heartPlate = new Plate(this, 76, 20, { radius: 4, alpha: 0.55 });
+    this.statPlate = new Plate(this, 84, 15, { radius: 4, alpha: 0.55 });
+    this.statsLabel = this.add.bitmapText(0, 0, Tex.font, '', 8).setTint(UiColor.text);
+    this.coinIcon = this.add.image(0, 0, itemTexture('coin')).setOrigin(0, 0.5);
+    this.questPlate = new Plate(this, 130, 34, { radius: 4, alpha: 0.55 });
+    this.questTitle = this.add.bitmapText(0, 0, Tex.font, '', 8).setOrigin(1, 0).setTint(UiColor.ember);
+    this.questLabel = this.add.bitmapText(0, 0, Tex.font, '', 8).setOrigin(1, 0).setTint(UiColor.text);
+    this.hud = this.add
+      .container(0, 0, [this.heartPlate, this.statPlate, this.statsLabel, this.coinIcon, this.questPlate, this.questTitle, this.questLabel])
+      .setDepth(Depth.UI);
+  }
+
+  /** Anchor every persistent element to the current logical viewport. */
+  private layout(): void {
+    const pad = 7;
+    this.heartPlate.setPosition(pad - 3, pad - 3);
+    this.statPlate.setPosition(pad - 3, pad + 17);
+    this.statsLabel.setPosition(pad + 13, pad + 21);
+    this.coinIcon.setPosition(pad + 2, pad + 25);
+    this.questTitle.setPosition(this.w - pad, pad);
+    this.questLabel.setPosition(this.w - pad, pad + 11).setMaxWidth(150);
+    this.positionHearts();
+    this.refreshQuestPlate();
+    if (this.bossHud) this.bossHud.setPosition(Math.round(this.w / 2 - 108), 10);
+  }
+
+  private rebuildOpenSurfaces(): void {
+    if (this.panelKind) this.renderPanel();
+    if (this.dialogueNode) {
+      const node = this.dialogueNode;
+      const callbacks = this.dialogueCallbacks;
+      const line = this.dialogueLine;
+      const option = this.dialogueOption;
+      this.closeDialogue(false);
+      this.showDialogue(node, callbacks);
+      this.dialogueLine = line;
+      this.dialogueOption = option;
+      this.renderDialogue();
+    }
+  }
+
   refreshAll(): void {
     if (!hasSession()) return;
     this.refreshHearts();
     const save = getSession().save;
-    this.statsLabel?.setText(`LV ${save.player.level}   XP ${save.player.xp}   COIN ${save.player.coins}`);
+    this.statsLabel.setText(`LV ${save.player.level}    ${save.player.coins}`);
+    this.statPlate.resize(Math.max(62, this.statsLabel.width + 22), 15);
+
     const active = Object.values(QUESTS).find((quest) => save.quests[quest.id]?.status === 'active');
     if (!active) {
-      this.questLabel?.setText(save.flags['ending.relit_shrine'] ? 'EMBER RESTORED' : 'Q  QUESTS');
-      return;
+      const done = Boolean(save.flags['ending.relit_shrine']);
+      this.questTitle.setText(done ? 'EMBER RESTORED' : 'QUESTS');
+      this.questLabel.setText(done ? '' : 'Q to open');
+    } else {
+      const progress = save.quests[active.id];
+      const objective = active.objectives.find((entry) => (progress?.objectives[entry.id] ?? 0) < entry.count);
+      const amount = objective ? (progress?.objectives[objective.id] ?? 0) : 0;
+      this.questTitle.setText(active.title.toUpperCase());
+      this.questLabel.setText(objective ? `${objective.label}  ${amount}/${objective.count}` : 'Return for your reward');
     }
-    const progress = save.quests[active.id];
-    const objective = active.objectives.find((entry) => (progress?.objectives[entry.id] ?? 0) < entry.count);
-    const amount = objective ? progress?.objectives[objective.id] ?? 0 : 0;
-    this.questLabel?.setText(objective ? `${active.title.toUpperCase()}\n${objective.label}  ${amount}/${objective.count}` : `${active.title.toUpperCase()}\nReturn for your reward`);
+    this.refreshQuestPlate();
+  }
+
+  private refreshQuestPlate(): void {
+    const width = Math.max(this.questTitle.width, this.questLabel.width) + 12;
+    const height = (this.questLabel.text ? 24 : 14) + 3;
+    this.questPlate.resize(width, height).setPosition(this.w - width - 4, 4);
   }
 
   refreshHearts(): void {
@@ -105,31 +195,77 @@ export class UIScene extends Phaser.Scene {
     for (let i = 0; i < total; i += 1) {
       const hpForHeart = save.player.hp - i * 2;
       const frame = hpForHeart >= 2 ? 4 : hpForHeart === 1 ? 2 : 0;
-      this.hearts.push(this.add.image(8 + i * 14, 8, Tex.hearts, frame).setOrigin(0, 0).setDepth(Depth.UI));
+      const heart = this.add.image(0, 0, Tex.hearts, frame).setOrigin(0, 0);
+      this.hearts.push(heart);
+      this.hud.add(heart);
     }
+    this.positionHearts();
   }
 
-  setMapLabel(text: string): void {
-    this.mapLabel.setText(text);
+  private positionHearts(): void {
+    const pad = 7;
+    this.hearts.forEach((heart, index) => heart.setPosition(pad + index * 13, pad - 1));
+    this.heartPlate.resize(Math.max(28, this.hearts.length * 13 + 6), 18);
   }
 
+  setMapLabel(_text: string): void {
+    // The persistent map label was replaced by the animated area card in showMapName.
+  }
+
+  /** Area name card that fades in at the top centre when a map loads. */
   showMapName(name: string): void {
-    this.banner?.destroy();
-    const text = this.add.bitmapText(GAME_WIDTH / 2, 30, Tex.font, name.toUpperCase(), 8).setOrigin(0.5).setTint(0xf0b45a).setDepth(Depth.UI).setAlpha(0);
-    text.setLetterSpacing(2);
-    this.banner = text;
-    this.tweens.add({ targets: text, alpha: 1, duration: 400, delay: 300, yoyo: true, hold: 1600, onComplete: () => text.destroy() });
+    this.banner?.destroy(true);
+    const label = this.add.bitmapText(0, 5, Tex.font, name.toUpperCase(), 8).setOrigin(0.5, 0).setTint(UiColor.emberBright);
+    label.setLetterSpacing(2);
+    const width = label.width + 34;
+    const plate = new Plate(this, width, 19, { radius: 4, alpha: 0.66, stroke: UiColor.ember, strokeAlpha: 0.35 });
+    plate.setPosition(-width / 2, 0);
+    const container = this.add.container(Math.round(this.w / 2), 56, [plate, label]).setDepth(Depth.UI + 1).setAlpha(0);
+    this.banner = container;
+    this.tweens.add({
+      targets: container,
+      alpha: 1,
+      y: 50,
+      duration: 420,
+      delay: 220,
+      ease: 'Cubic.easeOut',
+      yoyo: true,
+      hold: 1500,
+      onComplete: () => {
+        container.destroy(true);
+        if (this.banner === container) this.banner = null;
+      },
+    });
   }
 
   showToast(text: string): void {
-    this.toast?.destroy();
-    const width = Math.min(430, Math.max(84, text.length * 8 + 18));
-    const panel = new NinePanel(this, 0, 0, width, 22, Tex.panelDark);
-    const label = this.add.bitmapText(width / 2, 7, Tex.font, text, 8).setOrigin(0.5, 0).setTint(0xf2ead8).setMaxWidth(width - 12);
-    const container = this.add.container(Math.round(GAME_WIDTH / 2 - width / 2), GAME_HEIGHT - 42, [panel, label]).setDepth(Depth.UI).setAlpha(0);
+    this.toast?.destroy(true);
+    const maxWidth = Math.min(this.w - 40, 300);
+    const label = this.add.bitmapText(0, 6, Tex.font, text, 8).setOrigin(0.5, 0).setTint(UiColor.text).setMaxWidth(maxWidth).setCenterAlign();
+    const width = Math.min(this.w - 24, Math.max(90, label.width + 24));
+    const height = label.height + 13;
+    const plate = new Plate(this, width, height, { radius: 4, alpha: 0.82, stroke: UiColor.textFaint, strokeAlpha: 0.4 });
+    plate.setPosition(-width / 2, 0);
+    const container = this.add
+      .container(Math.round(this.w / 2), this.h - height - 14, [plate, label])
+      .setDepth(Depth.UI + 3)
+      .setAlpha(0);
     this.toast = container;
-    this.tweens.add({ targets: container, alpha: 1, duration: 150, yoyo: true, hold: 1500, onComplete: () => { container.destroy(); if (this.toast === container) this.toast = null; } });
+    this.tweens.add({
+      targets: container,
+      alpha: 1,
+      y: this.h - height - 20,
+      duration: 170,
+      yoyo: true,
+      hold: 1500,
+      onComplete: () => {
+        container.destroy(true);
+        if (this.toast === container) this.toast = null;
+      },
+    });
   }
+
+  // ---------------------------------------------------------------- dialogue
 
   showDialogue(node: DialogueNode, callbacks: DialogueCallbacks = {}): void {
     this.closePanel(false);
@@ -141,101 +277,69 @@ export class UIScene extends Phaser.Scene {
     this.dialogueOption = 0;
     this.modalReadyAt = this.time.now + 180;
 
-    const panel = new NinePanel(this, 0, 0, 448, 72, Tex.panelWood);
-    const items: Phaser.GameObjects.GameObject[] = [panel];
+    const width = Math.min(this.w - 28, 380);
+    const height = 78;
+    const hasPortrait = Boolean(node.portrait && this.textures.exists(node.portrait));
+    const frame = new NinePanel(this, 0, 0, width, height, Tex.panelWood);
+    const inner = new Plate(this, width - 14, height - 14, { radius: 2, fill: 0x1a1720, alpha: 0.93 });
+    inner.setPosition(7, 7);
+    const items: Phaser.GameObjects.GameObject[] = [frame, inner];
+
     let textX = 14;
-    if (node.portrait && this.textures.exists(node.portrait)) {
-      items.push(this.add.image(28, 36, node.portrait).setDisplaySize(38, 38));
-      textX = 55;
+    if (hasPortrait && node.portrait) {
+      const portraitFrame = new Plate(this, 42, 42, { radius: 2, fill: 0x0d0b12, alpha: 0.95, stroke: UiColor.ember, strokeAlpha: 0.55 });
+      portraitFrame.setPosition(12, 22);
+      items.push(portraitFrame, this.add.image(33, 43, node.portrait).setDisplaySize(38, 38));
+      textX = 60;
     }
-    const speaker = this.add.bitmapText(textX, 8, Tex.font, this.displayName(node.speakerId), 8).setTint(0xf0b45a);
-    this.dialogueBody = this.add.bitmapText(textX, 22, Tex.font, '', 8).setTint(0xf2ead8).setMaxWidth(448 - textX - 12);
-    this.dialogueChoices = this.add.bitmapText(textX, 42, Tex.font, '', 8).setTint(0xcfe7ad).setMaxWidth(448 - textX - 12);
-    const hint = this.add.bitmapText(434, 59, Tex.font, 'E', 8).setOrigin(1, 0).setTint(0x9a8f80);
+    const speaker = this.add.bitmapText(textX, 14, Tex.font, this.displayName(node.speakerId), 8).setTint(UiColor.emberBright);
+    this.dialogueBody = this.add.bitmapText(textX, 28, Tex.font, '', 8).setTint(UiColor.text).setMaxWidth(width - textX - 14);
+    this.dialogueChoices = this.add.bitmapText(textX, 50, Tex.font, '', 8).setTint(UiColor.good).setMaxWidth(width - textX - 14);
+    const hint = this.add.bitmapText(width - 12, height - 17, Tex.font, 'E', 8).setOrigin(1, 0).setTint(UiColor.textFaint);
     items.push(speaker, this.dialogueBody, this.dialogueChoices, hint);
-    this.dialogue = this.add.container(16, 188, items).setDepth(Depth.UI + 10);
+
+    this.dialogue = this.add
+      .container(Math.round((this.w - width) / 2), this.h - height - 12, items)
+      .setDepth(Depth.UI + 10);
     this.renderDialogue();
     this.sound.play(sfxKey('dialogue_blip'), { volume: 0.25 });
-  }
-
-  showBoss(name: string, hp: number, maxHp: number): void {
-    if (!this.bossHud) {
-      const panel = new NinePanel(this, 0, 0, 210, 24, Tex.panelDark);
-      this.bossName = this.add.bitmapText(105, 4, Tex.font, '', 8).setOrigin(0.5, 0).setTint(0xffd29a);
-      const under = this.add.rectangle(12, 16, 186, 4, 0x24191c).setOrigin(0, 0.5);
-      this.bossFill = this.add.rectangle(12, 16, 186, 4, 0xc9504d).setOrigin(0, 0.5);
-      this.bossHud = this.add.container(135, 8, [panel, this.bossName, under, this.bossFill]).setDepth(Depth.UI + 2);
-    }
-    this.bossName?.setText(name.toUpperCase());
-    if (this.bossFill) this.bossFill.width = Math.max(0, Math.round(186 * hp / Math.max(1, maxHp)));
-    this.bossHud.setVisible(true);
-  }
-
-  hideBoss(): void {
-    this.bossHud?.setVisible(false);
-  }
-
-  showGameOver(onRetry: () => void): void {
-    this.showSpecial('THE EMBER FADES', 'Press E or Enter to rise at the last checkpoint.', () => {
-      this.closeSpecial(false);
-      onRetry();
-    }, 0xb84545);
-  }
-
-  showEnding(): void {
-    this.showSpecial('EMBER RESTORED', 'Warm light returns to Kagehara.\n\nThank you for playing Emberfall.', () => this.closeSpecial(), 0xf0b45a);
-  }
-
-  showShop(): void {
-    this.openPanel('shop');
-  }
-
-  override update(time: number): void {
-    this.inputActions.update(time);
-    if (time < this.modalReadyAt) return;
-    if (this.special) {
-      if (this.inputActions.pressed('confirm') || this.inputActions.pressed('cancel')) this.specialAction?.();
-      return;
-    }
-    if (this.dialogue) {
-      if (this.dialogueNode?.options?.length) {
-        if (this.inputActions.pressed('menuDown')) this.moveDialogueOption(1);
-        if (this.inputActions.pressed('menuUp')) this.moveDialogueOption(-1);
-      }
-      if (this.inputActions.pressed('confirm')) this.advanceDialogue();
-      if (this.inputActions.pressed('cancel')) this.closeDialogue();
-      return;
-    }
-    if (this.panel) {
-      if (this.panelKind === 'pause') {
-        if (this.inputActions.pressed('menuDown')) this.moveSetting(1);
-        if (this.inputActions.pressed('menuUp')) this.moveSetting(-1);
-        if (this.inputActions.pressed('menuLeft')) this.adjustSetting(-1);
-        if (this.inputActions.pressed('menuRight') || this.inputActions.pressed('confirm')) this.adjustSetting(1);
-      } else if (this.panelKind === 'inventory' || this.panelKind === 'shop') {
-        if (this.inputActions.pressed('menuDown')) this.moveList(1);
-        if (this.inputActions.pressed('menuUp')) this.moveList(-1);
-        if (this.inputActions.pressed('confirm')) this.activateListItem();
-      }
-      if (this.inputActions.pressed('cancel') || this.inputActions.pressed('pause') || (this.panelKind === 'inventory' && this.inputActions.pressed('inventory')) || (this.panelKind === 'quests' && this.inputActions.pressed('quests'))) this.closePanel();
-      return;
-    }
-    if (this.inputActions.pressed('inventory')) this.openPanel('inventory');
-    else if (this.inputActions.pressed('quests')) this.openPanel('quests');
-    else if (this.inputActions.pressed('pause')) this.openPanel('pause');
   }
 
   private renderDialogue(): void {
     const node = this.dialogueNode;
     if (!node || !this.dialogueBody || !this.dialogueChoices) return;
-    this.dialogueBody.setText(node.lines[this.dialogueLine] ?? '');
+    this.dialogueFullText = node.lines[this.dialogueLine] ?? '';
+    this.dialogueReveal = 0;
+    this.dialogueBody.setText('');
     const onLastLine = this.dialogueLine >= node.lines.length - 1;
-    this.dialogueChoices.setText(onLastLine && node.options?.length ? node.options.map((option, index) => `${index === this.dialogueOption ? '>' : ' '} ${option.label}`).join('\n') : '');
+    this.dialogueChoices.setText(
+      onLastLine && node.options?.length
+        ? node.options.map((option, index) => `${index === this.dialogueOption ? '>' : ' '} ${option.label}`).join('\n')
+        : '',
+    );
+    this.dialogueChoices.setVisible(false);
+  }
+
+  /** Typewriter reveal: fast enough not to slow reading, slow enough to feel spoken. */
+  private updateDialogueReveal(delta: number): void {
+    if (!this.dialogueBody) return;
+    if (this.dialogueReveal >= this.dialogueFullText.length) {
+      if (this.dialogueChoices && !this.dialogueChoices.visible) this.dialogueChoices.setVisible(true);
+      return;
+    }
+    this.dialogueReveal = Math.min(this.dialogueFullText.length, this.dialogueReveal + delta * 0.06);
+    this.dialogueBody.setText(this.dialogueFullText.slice(0, Math.floor(this.dialogueReveal)));
   }
 
   private advanceDialogue(): void {
     const node = this.dialogueNode;
     if (!node) return;
+    if (this.dialogueReveal < this.dialogueFullText.length) {
+      this.dialogueReveal = this.dialogueFullText.length;
+      this.dialogueBody?.setText(this.dialogueFullText);
+      this.dialogueChoices?.setVisible(true);
+      return;
+    }
     if (this.dialogueLine < node.lines.length - 1) {
       this.dialogueLine += 1;
       this.renderDialogue();
@@ -248,10 +352,11 @@ export class UIScene extends Phaser.Scene {
   }
 
   private moveDialogueOption(direction: number): void {
-    const count = this.dialogueNode?.options?.length ?? 0;
-    if (!count) return;
+    const node = this.dialogueNode;
+    const count = node?.options?.length ?? 0;
+    if (!count || !node?.options) return;
     this.dialogueOption = (this.dialogueOption + direction + count) % count;
-    this.renderDialogue();
+    this.dialogueChoices?.setText(node.options.map((option, index) => `${index === this.dialogueOption ? '>' : ' '} ${option.label}`).join('\n'));
     this.sound.play(sfxKey('menu_move'), { volume: 0.25 });
   }
 
@@ -270,6 +375,118 @@ export class UIScene extends Phaser.Scene {
     }
   }
 
+  // ---------------------------------------------------------------- boss
+
+  showBoss(name: string, hp: number, maxHp: number): void {
+    const width = 216;
+    if (!this.bossHud) {
+      const frame = new NinePanel(this, 0, 0, width, 28, Tex.panelWood);
+      const inner = new Plate(this, width - 14, 14, { radius: 2, fill: 0x140f14, alpha: 0.95 });
+      inner.setPosition(7, 12);
+      this.bossName = this.add.bitmapText(width / 2, 4, Tex.font, '', 8).setOrigin(0.5, 0).setTint(UiColor.emberBright);
+      this.bossTrail = this.add.rectangle(9, 19, width - 18, 10, 0xffd9a8).setOrigin(0, 0.5);
+      this.bossFill = this.add.rectangle(9, 19, width - 18, 10, 0xc0433f).setOrigin(0, 0.5);
+      this.bossHud = this.add
+        .container(Math.round(this.w / 2 - width / 2), 10, [frame, inner, this.bossName, this.bossTrail, this.bossFill])
+        .setDepth(Depth.UI + 2)
+        .setAlpha(0);
+      this.bossRatio = 1;
+      this.tweens.add({ targets: this.bossHud, alpha: 1, duration: 400 });
+    }
+    this.bossName?.setText(name.toUpperCase());
+    const ratio = Phaser.Math.Clamp(hp / Math.max(1, maxHp), 0, 1);
+    const full = width - 18;
+    if (this.bossFill) this.bossFill.width = Math.max(0, Math.round(full * ratio));
+    // The pale bar trails the red one, so each hit reads as a visible chunk taken off.
+    if (this.bossTrail && ratio < this.bossRatio) {
+      this.tweens.killTweensOf(this.bossTrail);
+      this.tweens.add({ targets: this.bossTrail, width: Math.max(0, Math.round(full * ratio)), duration: 430, delay: 130, ease: 'Cubic.easeOut' });
+    } else if (this.bossTrail) {
+      this.bossTrail.width = Math.max(0, Math.round(full * ratio));
+    }
+    this.bossRatio = ratio;
+    this.bossHud.setVisible(true);
+    this.bossHud.setPosition(Math.round(this.w / 2 - width / 2), 10);
+    this.setQuestTrackerVisible(false);
+  }
+
+  hideBoss(): void {
+    this.setQuestTrackerVisible(true);
+    if (!this.bossHud || !this.bossHud.visible) return;
+    const hud = this.bossHud;
+    this.tweens.add({ targets: hud, alpha: 0, duration: 500, onComplete: () => hud.setVisible(false) });
+  }
+
+  /** The boss bar and the quest tracker both want the top-right; only one is shown at a time. */
+  private setQuestTrackerVisible(visible: boolean): void {
+    this.questPlate.setVisible(visible);
+    this.questTitle.setVisible(visible);
+    this.questLabel.setVisible(visible);
+  }
+
+  // ---------------------------------------------------------------- modals
+
+  showGameOver(onRetry: () => void): void {
+    this.showSpecial('THE EMBER FADES', 'Press E or Enter to rise at the last checkpoint.', () => {
+      this.closeSpecial(false);
+      onRetry();
+    }, UiColor.danger);
+  }
+
+  showEnding(): void {
+    this.showSpecial('EMBER RESTORED', 'Warm light returns to Kagehara.\n\nThank you for playing Emberfall.', () => this.closeSpecial(), UiColor.ember);
+  }
+
+  showShop(): void {
+    this.openPanel('shop');
+  }
+
+  override update(time: number, delta: number): void {
+    this.inputActions.update(time);
+    if (this.dialogue) this.updateDialogueReveal(delta);
+    if (time < this.modalReadyAt) return;
+
+    if (this.special) {
+      if (this.inputActions.pressed('confirm') || this.inputActions.pressed('cancel')) this.specialAction?.();
+      return;
+    }
+    if (this.dialogue) {
+      if (this.dialogueNode?.options?.length && this.dialogueReveal >= this.dialogueFullText.length) {
+        if (this.inputActions.pressed('menuDown')) this.moveDialogueOption(1);
+        if (this.inputActions.pressed('menuUp')) this.moveDialogueOption(-1);
+      }
+      if (this.inputActions.pressed('confirm')) this.advanceDialogue();
+      else if (this.inputActions.pressed('cancel')) this.closeDialogue();
+      return;
+    }
+    if (this.panel) {
+      if (this.panelKind === 'pause') {
+        if (this.inputActions.pressed('menuDown')) this.moveSetting(1);
+        if (this.inputActions.pressed('menuUp')) this.moveSetting(-1);
+        if (this.inputActions.pressed('menuLeft')) this.adjustSetting(-1);
+        if (this.inputActions.pressed('menuRight') || this.inputActions.pressed('confirm')) this.adjustSetting(1);
+      } else if (this.panelKind === 'inventory' || this.panelKind === 'shop') {
+        if (this.inputActions.pressed('menuDown')) this.moveList(this.panelKind === 'inventory' ? 5 : 1);
+        if (this.inputActions.pressed('menuUp')) this.moveList(this.panelKind === 'inventory' ? -5 : -1);
+        if (this.inputActions.pressed('menuRight')) this.moveList(1);
+        if (this.inputActions.pressed('menuLeft')) this.moveList(-1);
+        if (this.inputActions.pressed('confirm')) this.activateListItem();
+      }
+      if (
+        this.inputActions.pressed('cancel') ||
+        this.inputActions.pressed('pause') ||
+        (this.panelKind === 'inventory' && this.inputActions.pressed('inventory')) ||
+        (this.panelKind === 'quests' && this.inputActions.pressed('quests'))
+      ) {
+        this.closePanel();
+      }
+      return;
+    }
+    if (this.inputActions.pressed('inventory')) this.openPanel('inventory');
+    else if (this.inputActions.pressed('quests')) this.openPanel('quests');
+    else if (this.inputActions.pressed('pause')) this.openPanel('pause');
+  }
+
   private openPanel(kind: PanelKind): void {
     if (!hasSession()) return;
     this.closePanel(false);
@@ -279,57 +496,184 @@ export class UIScene extends Phaser.Scene {
     this.setWorldLocked(true);
     this.modalReadyAt = this.time.now + 160;
     this.renderPanel();
+    this.sound.play(sfxKey('menu_accept'), { volume: 0.3 });
+  }
+
+  /** Shared modal chrome: dim the world, wood frame, dark inset, title, footer hint. */
+  private beginModal(
+    title: string,
+    width: number,
+    height: number,
+    hint: string,
+  ): { container: Phaser.GameObjects.Container; items: Phaser.GameObjects.GameObject[]; x: number; y: number; contentTop: number } {
+    const shade = this.add.rectangle(0, 0, this.w, this.h, 0x07060b, 0.62).setOrigin(0, 0);
+    const x = Math.round((this.w - width) / 2);
+    const y = Math.round((this.h - height) / 2);
+    const frame = new NinePanel(this, x, y, width, height, Tex.panelWood);
+    const inner = new Plate(this, width - 14, height - 30, { radius: 2, fill: 0x191621, alpha: 0.95 });
+    inner.setPosition(x + 7, y + 23);
+    const heading = this.add.bitmapText(x + 12, y + 8, Tex.font, title, 8).setTint(UiColor.emberBright);
+    heading.setLetterSpacing(2);
+    const hintLabel = this.add.bitmapText(x + width - 12, y + 8, Tex.font, hint, 8).setOrigin(1, 0).setTint(UiColor.textFaint);
+    const items: Phaser.GameObjects.GameObject[] = [shade, frame, inner, heading, hintLabel];
+    const container = this.add.container(0, 0, [...items]).setDepth(Depth.UI + 8);
+    return { container, items: [], x, y, contentTop: y + 30 };
   }
 
   private renderPanel(): void {
     this.panel?.destroy(true);
+    this.panel = null;
     const kind = this.panelKind;
     if (!kind || !hasSession()) return;
-    const panel = new NinePanel(this, 0, 0, 400, 206, Tex.panelWood);
-    const title = this.add.bitmapText(16, 12, Tex.font, kind.toUpperCase(), 16).setTint(0xf0b45a);
-    const body = this.add.bitmapText(18, 39, Tex.font, this.panelText(kind), 8).setTint(0xf2ead8).setMaxWidth(364);
-    const interactive = kind === 'inventory' || kind === 'shop' || kind === 'pause';
-    const hint = this.add.bitmapText(382, 188, Tex.font, interactive ? 'ARROWS / E / ESC' : 'ESC TO CLOSE', 8).setOrigin(1, 0).setTint(0x9a8f80);
-    this.panel = this.add.container(40, 32, [panel, title, body, hint]).setDepth(Depth.UI + 8);
+    if (kind === 'inventory') this.renderInventory();
+    else if (kind === 'shop') this.renderShop();
+    else if (kind === 'quests') this.renderQuests();
+    else this.renderPause();
   }
 
-  private panelText(kind: PanelKind): string {
+  private renderInventory(): void {
     const save = getSession().save;
-    if (kind === 'inventory') {
-      const lines = save.inventory.map((entry, index) => {
-        const item = getItem(entry.itemId);
-        const equipped = save.equipment.weapon === entry.itemId || save.equipment.accessory === entry.itemId ? ' [EQUIPPED]' : '';
-        return `${index === this.listIndex ? '>' : ' '} ${item.name} x${entry.quantity}${equipped}`;
-      });
-      const selected = save.inventory[this.listIndex];
-      const description = selected ? getItem(selected.itemId).description : 'Your pack is empty.';
-      return `Coins: ${save.player.coins}\n\n${lines.join('\n')}\n\n${description}`;
+    const width = Math.min(this.w - 32, 326);
+    const height = Math.min(this.h - 28, 172);
+    const { container, items, x, contentTop } = this.beginModal('INVENTORY', width, height, 'ARROWS  E  ESC');
+
+    const cols = 5;
+    const cell = 23;
+    const gridX = x + 14;
+    const entries = save.inventory;
+    const slots = Math.max(entries.length, cols * 3);
+    for (let i = 0; i < slots; i += 1) {
+      const row = Math.floor(i / cols);
+      if (row > 2) break;
+      const cx = gridX + (i % cols) * cell;
+      const cy = contentTop + row * cell;
+      items.push(this.add.image(cx, cy, Tex.inventoryCell).setOrigin(0, 0).setDisplaySize(20, 20).setAlpha(entries[i] ? 1 : 0.35));
+      const entry = entries[i];
+      if (!entry) continue;
+      const item = getItem(entry.itemId);
+      items.push(this.add.image(cx + 10, cy + 10, itemTexture(item.id)).setOrigin(0.5));
+      if (entry.quantity > 1) {
+        items.push(this.add.bitmapText(cx + 19, cy + 11, Tex.font, String(entry.quantity), 8).setOrigin(1, 0).setTint(UiColor.text));
+      }
+      if (save.equipment.weapon === entry.itemId || save.equipment.accessory === entry.itemId) {
+        items.push(this.add.rectangle(cx + 1, cy + 1, 18, 2, 0xf0b45a).setOrigin(0, 0));
+      }
+      if (i === this.listIndex) items.push(this.add.rectangle(cx - 1, cy - 1, 22, 22).setOrigin(0, 0).setStrokeStyle(1, 0xffd08a));
     }
-    if (kind === 'quests') {
-      const lines = Object.values(QUESTS).map((quest) => {
-        const progress = save.quests[quest.id];
-        if (!progress || progress.status === 'locked') return '';
-        const objectives = quest.objectives.map((entry) => `  ${(progress.objectives[entry.id] ?? 0) >= entry.count ? '[x]' : '[ ]'} ${entry.label}`).join('\n');
-        return `${quest.title} - ${progress.status.toUpperCase()}\n${objectives}`;
-      }).filter(Boolean);
-      return lines.length ? lines.join('\n\n') : 'No quests yet. Speak with the villagers.';
+
+    const detailX = gridX + cols * cell + 8;
+    const detailWidth = x + width - 14 - detailX;
+    const selected = entries[this.listIndex];
+    items.push(
+      this.add.bitmapText(detailX, contentTop, Tex.font, selected ? getItem(selected.itemId).name : 'Empty', 8).setTint(UiColor.emberBright).setMaxWidth(detailWidth),
+    );
+    items.push(
+      this.add
+        .bitmapText(detailX, contentTop + 14, Tex.font, selected ? getItem(selected.itemId).description : 'Your pack is empty.', 8)
+        .setTint(UiColor.textDim)
+        .setMaxWidth(detailWidth),
+    );
+    if (selected) {
+      const item = getItem(selected.itemId);
+      const verb = item.category === 'weapon' || item.category === 'accessory' ? 'E   EQUIP' : item.consumable ? 'E   USE' : '';
+      if (verb) items.push(this.add.bitmapText(detailX, contentTop + 50, Tex.font, verb, 8).setTint(UiColor.good));
     }
-    if (kind === 'shop') {
-      const rows = SHOP_ITEMS.map((offer, index) => {
-        const item = getItem(offer.itemId);
-        const quantity = offer.quantity > 1 ? ` x${offer.quantity}` : '';
-        return `${index === this.listIndex ? '>' : ' '} ${item.name}${quantity}  ${offer.cost}c`;
-      });
-      const selected = SHOP_ITEMS[this.listIndex] ?? SHOP_ITEMS[0];
-      return `Coins: ${save.player.coins}\n\n${rows.join('\n\n')}\n\n${selected ? getItem(selected.itemId).description : ''}`;
+    const coinY = contentTop + 3 * cell + 8;
+    items.push(this.add.image(gridX + 1, coinY, itemTexture('coin')).setOrigin(0, 0.5));
+    items.push(this.add.bitmapText(gridX + 13, coinY - 4, Tex.font, `${save.player.coins}`, 8).setTint(UiColor.coin));
+    container.add(items);
+    this.panel = container;
+  }
+
+  private renderShop(): void {
+    const save = getSession().save;
+    const width = Math.min(this.w - 32, 304);
+    const height = Math.min(this.h - 28, 178);
+    const { container, items, x, contentTop } = this.beginModal('BOTAN STALL', width, height, 'ARROWS  E  ESC');
+    SHOP_ITEMS.forEach((offer, index) => {
+      const item = getItem(offer.itemId);
+      const rowY = contentTop + index * 25;
+      const selected = index === this.listIndex;
+      if (selected) items.push(this.add.rectangle(x + 11, rowY - 3, width - 22, 23, 0x2f2a3a).setOrigin(0, 0));
+      items.push(this.add.image(x + 24, rowY + 8, Tex.inventoryCell).setOrigin(0.5).setDisplaySize(18, 18).setAlpha(0.85));
+      items.push(this.add.image(x + 24, rowY + 8, itemTexture(item.id)).setOrigin(0.5));
+      const label = `${item.name}${offer.quantity > 1 ? ` x${offer.quantity}` : ''}`;
+      items.push(this.add.bitmapText(x + 38, rowY, Tex.font, label, 8).setTint(selected ? UiColor.emberBright : UiColor.text));
+      const affordable = save.player.coins >= offer.cost;
+      items.push(this.add.bitmapText(x + width - 14, rowY, Tex.font, `${offer.cost}`, 8).setOrigin(1, 0).setTint(affordable ? UiColor.coin : UiColor.danger));
+      items.push(this.add.bitmapText(x + 38, rowY + 10, Tex.font, item.description, 8).setTint(UiColor.textFaint).setMaxWidth(width - 66));
+    });
+    const coinY = contentTop + SHOP_ITEMS.length * 25 + 6;
+    items.push(this.add.image(x + 15, coinY, itemTexture('coin')).setOrigin(0, 0.5));
+    items.push(this.add.bitmapText(x + 27, coinY - 4, Tex.font, `${save.player.coins}`, 8).setTint(UiColor.coin));
+    container.add(items);
+    this.panel = container;
+  }
+
+  private renderQuests(): void {
+    const save = getSession().save;
+    const width = Math.min(this.w - 32, 304);
+    const height = Math.min(this.h - 28, 174);
+    const { container, items, x, contentTop } = this.beginModal('QUEST LOG', width, height, 'ESC');
+    let y = contentTop;
+    let any = false;
+    for (const quest of Object.values(QUESTS)) {
+      const progress = save.quests[quest.id];
+      if (!progress || progress.status === 'locked') continue;
+      any = true;
+      const complete = progress.status === 'completed' || progress.status === 'rewarded';
+      items.push(this.add.bitmapText(x + 14, y, Tex.font, quest.title, 8).setTint(complete ? UiColor.good : UiColor.emberBright));
+      items.push(this.add.bitmapText(x + width - 14, y, Tex.font, complete ? 'DONE' : 'ACTIVE', 8).setOrigin(1, 0).setTint(complete ? UiColor.good : UiColor.textDim));
+      y += 13;
+      for (const objective of quest.objectives) {
+        const amount = progress.objectives[objective.id] ?? 0;
+        const done = amount >= objective.count;
+        items.push(this.add.rectangle(x + 21, y + 4, 4, 4, done ? 0xa8d08a : 0x7f7568).setOrigin(0.5));
+        items.push(
+          this.add
+            .bitmapText(x + 30, y, Tex.font, `${objective.label}   ${Math.min(amount, objective.count)}/${objective.count}`, 8)
+            .setTint(done ? UiColor.textFaint : UiColor.text)
+            .setMaxWidth(width - 50),
+        );
+        y += 11;
+      }
+      y += 7;
     }
+    if (!any) {
+      items.push(this.add.bitmapText(x + 14, contentTop, Tex.font, 'No quests yet. Speak with the villagers.', 8).setTint(UiColor.textDim).setMaxWidth(width - 28));
+    }
+    container.add(items);
+    this.panel = container;
+  }
+
+  private renderPause(): void {
+    const width = Math.min(this.w - 32, 254);
+    const height = Math.min(this.h - 28, 160);
+    const { container, items, x, contentTop } = this.beginModal('PAUSED', width, height, 'ARROWS  E  ESC');
     const settings = SettingsStore.get();
-    const rows = ['Resume', `Master Volume  ${Math.round(settings.masterVolume * 100)}%`, `Screen Shake   ${settings.screenShake ? 'ON' : 'OFF'}`, `Hints          ${settings.showHints ? 'ON' : 'OFF'}`];
-    return rows.map((row, index) => `${index === this.settingIndex ? '>' : ' '} ${row}`).join('\n\n');
+    const rows = [
+      { label: 'Resume', value: '' },
+      { label: 'Volume', value: `${Math.round(settings.masterVolume * 100)}%` },
+      { label: 'Screen Shake', value: settings.screenShake ? 'ON' : 'OFF' },
+      { label: 'Display', value: settings.displayMode === 'fill' ? 'FILL WINDOW' : 'FIXED VIEW' },
+      { label: 'Hints', value: settings.showHints ? 'ON' : 'OFF' },
+    ];
+    rows.forEach((row, index) => {
+      const rowY = contentTop + index * 19;
+      const selected = index === this.settingIndex;
+      if (selected) items.push(this.add.rectangle(x + 11, rowY - 4, width - 22, 18, 0x2f2a3a).setOrigin(0, 0));
+      items.push(this.add.bitmapText(x + 20, rowY, Tex.font, row.label, 8).setTint(selected ? UiColor.emberBright : UiColor.text));
+      if (row.value) {
+        items.push(this.add.bitmapText(x + width - 16, rowY, Tex.font, row.value, 8).setOrigin(1, 0).setTint(selected ? UiColor.emberBright : UiColor.textDim));
+      }
+      if (selected) items.push(this.add.image(x + 13, rowY + 4, Tex.arrowRight).setOrigin(0.5));
+    });
+    container.add(items);
+    this.panel = container;
   }
 
   private moveSetting(direction: number): void {
-    this.settingIndex = (this.settingIndex + direction + 4) % 4;
+    this.settingIndex = (this.settingIndex + direction + 5) % 5;
     this.sound.play(sfxKey('menu_move'), { volume: 0.25 });
     this.renderPanel();
   }
@@ -337,7 +681,7 @@ export class UIScene extends Phaser.Scene {
   private moveList(direction: number): void {
     const count = this.panelKind === 'shop' ? SHOP_ITEMS.length : getSession().save.inventory.length;
     if (!count) return;
-    this.listIndex = (this.listIndex + direction + count) % count;
+    this.listIndex = (this.listIndex + direction + count * 2) % count;
     this.sound.play(sfxKey('menu_move'), { volume: 0.25 });
     this.renderPanel();
   }
@@ -366,8 +710,13 @@ export class UIScene extends Phaser.Scene {
       const volume = Phaser.Math.Clamp(Math.round((current.masterVolume + direction * 0.1) * 10) / 10, 0, 1);
       SettingsStore.set({ masterVolume: volume });
       this.sound.volume = volume;
-    } else if (this.settingIndex === 2) SettingsStore.set({ screenShake: !current.screenShake });
-    else SettingsStore.set({ showHints: !current.showHints });
+    } else if (this.settingIndex === 2) {
+      SettingsStore.set({ screenShake: !current.screenShake });
+    } else if (this.settingIndex === 3) {
+      Display.setMode(current.displayMode === 'fill' ? 'fixed' : 'fill');
+    } else {
+      SettingsStore.set({ showHints: !current.showHints });
+    }
     this.sound.play(sfxKey('menu_accept'), { volume: 0.25 });
     this.renderPanel();
   }
@@ -385,12 +734,24 @@ export class UIScene extends Phaser.Scene {
     this.closeSpecial(false);
     this.setWorldLocked(true);
     this.modalReadyAt = this.time.now + 400;
-    const shade = this.add.rectangle(-70, -72, GAME_WIDTH, GAME_HEIGHT, 0x09070c, 0.88).setOrigin(0, 0);
-    const panel = new NinePanel(this, 0, 0, 340, 126, Tex.panelWood);
-    const heading = this.add.bitmapText(170, 22, Tex.font, title, 16).setOrigin(0.5, 0).setTint(tint);
-    const copy = this.add.bitmapText(170, 54, Tex.font, body, 8).setOrigin(0.5, 0).setTint(0xf2ead8).setCenterAlign().setMaxWidth(306);
-    const hint = this.add.bitmapText(170, 105, Tex.font, 'E / ENTER', 8).setOrigin(0.5, 0).setTint(0x9a8f80);
-    this.special = this.add.container(70, 72, [shade, panel, heading, copy, hint]).setDepth(Depth.UI + 20);
+    const width = Math.min(this.w - 40, 292);
+    const height = 118;
+    const x = Math.round((this.w - width) / 2);
+    const y = Math.round((this.h - height) / 2);
+    const shade = this.add.rectangle(0, 0, this.w, this.h, 0x07060b, 0.9).setOrigin(0, 0);
+    const frame = new NinePanel(this, x, y, width, height, Tex.panelWood);
+    const inner = new Plate(this, width - 14, height - 14, { radius: 2, fill: 0x161320, alpha: 0.96 });
+    inner.setPosition(x + 7, y + 7);
+    const heading = this.add.bitmapText(x + width / 2, y + 20, Tex.font, title, 8).setOrigin(0.5, 0).setTint(tint);
+    heading.setLetterSpacing(2);
+    const copy = this.add
+      .bitmapText(x + width / 2, y + 44, Tex.font, body, 8)
+      .setOrigin(0.5, 0)
+      .setTint(UiColor.text)
+      .setCenterAlign()
+      .setMaxWidth(width - 34);
+    const hint = this.add.bitmapText(x + width / 2, y + height - 22, Tex.font, 'E / ENTER', 8).setOrigin(0.5, 0).setTint(UiColor.textFaint);
+    this.special = this.add.container(0, 0, [shade, frame, inner, heading, copy, hint]).setDepth(Depth.UI + 20);
     this.specialAction = action;
   }
 

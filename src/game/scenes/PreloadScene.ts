@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { ASSET_ROOT, Tex, itemTexture, sfxKey } from '../config/assets';
-import { GAME_HEIGHT, GAME_WIDTH } from '../config/constants';
+import { Display } from '../systems/DisplaySystem';
 import { registerHeroAnimations } from '../entities/player/heroAnimations';
 import { ITEMS } from '../data/items';
 import { SFX_IDS } from '../data/audio';
@@ -113,9 +113,10 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   private buildLoadingScreen(): void {
-    const cx = GAME_WIDTH / 2;
-    const cy = GAME_HEIGHT / 2;
-    this.add.rectangle(cx, cy, GAME_WIDTH, GAME_HEIGHT, 0x0b0a12);
+    Display.applyToCamera(this.cameras.main);
+    const cx = Math.round(Display.width / 2);
+    const cy = Math.round(Display.height / 2);
+    this.add.rectangle(0, 0, Display.width, Display.height, 0x0b0a12).setOrigin(0, 0);
     const title = this.add.bitmapText(cx, cy - 34, Tex.font, 'EMBERFALL', 16).setOrigin(0.5).setTint(0xf0b45a);
     title.setLetterSpacing(2);
     const panel = new NinePanel(this, cx - 90, cy - 6, 180, 14, Tex.panelDark);

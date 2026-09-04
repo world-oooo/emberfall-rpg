@@ -16,7 +16,7 @@ export interface EnemyTarget {
 
 export type EnemyHitboxSink = (config: HitboxConfig) => void;
 
-type EnemyState = 'idle' | 'chase' | 'windup' | 'attack' | 'cooldown' | 'return' | 'dead';
+export type EnemyState = 'idle' | 'chase' | 'windup' | 'attack' | 'cooldown' | 'return' | 'dead';
 
 let nextEnemyUid = 1;
 
@@ -24,13 +24,16 @@ export class BaseEnemy extends Actor implements Hittable {
   readonly hitId: string;
   readonly health: Health;
   readonly spawn = new Phaser.Math.Vector2();
-  private readonly feedback: HitFeedback;
-  private state: EnemyState = 'idle';
+  protected readonly feedback: HitFeedback;
+  protected state: EnemyState = 'idle';
   private stateElapsed = 0;
   private cooldownUntil = 0;
   private attackSpawned = false;
-  private lastDir = new Phaser.Math.Vector2(0, 1);
-  private destroyed = false;
+  protected lastDir = new Phaser.Math.Vector2(0, 1);
+  /** Reused every frame; the previous code allocated a Vector2 per enemy per frame. */
+  private readonly toTarget = new Phaser.Math.Vector2();
+  private telegraphed = false;
+  protected destroyed = false;
 
   constructor(
     scene: Phaser.Scene,
@@ -68,13 +71,17 @@ export class BaseEnemy extends Actor implements Hittable {
     this.syncDepth();
     if (this.feedback.isKnockedBack) return;
 
-    const toTarget = new Phaser.Math.Vector2(target.body.center.x - this.body.center.x, target.body.center.y - this.body.center.y);
+    const toTarget = this.toTarget.set(target.body.center.x - this.body.center.x, target.body.center.y - this.body.center.y);
     const distance = toTarget.length();
     const fromSpawn = Phaser.Math.Distance.Between(this.x, this.y, this.spawn.x, this.spawn.y);
     if (distance > 0) this.lastDir.copy(toTarget).normalize();
 
     if (this.state === 'windup') {
       this.body.velocity.set(0, 0);
+      if (!this.telegraphed) {
+        this.telegraphed = true;
+        this.showTelegraph();
+      }
       if (this.stateElapsed >= this.def.attack.windup) this.setState('attack');
       return;
     }
@@ -188,7 +195,7 @@ export class BaseEnemy extends Actor implements Hittable {
     this.state = 'idle';
   }
 
-  private moveToward(x: number, y: number, speed: number): void {
+  protected moveToward(x: number, y: number, speed: number): void {
     const dx = x - this.body.center.x;
     const dy = y - this.body.center.y;
     const len = Math.hypot(dx, dy);
@@ -211,12 +218,41 @@ export class BaseEnemy extends Actor implements Hittable {
     this.state = state;
     this.stateElapsed = 0;
     this.attackSpawned = false;
-    if (state === 'windup') this.sprite.setTint(this.def.boss ? 0xff9b67 : 0xffc1a3);
+    if (state !== 'windup') this.telegraphed = false;
+    if (state === 'windup') this.sprite.setTint(0xff7a5c);
     else if (this.def.tint !== undefined) this.sprite.setTint(this.def.tint);
     else this.sprite.clearTint();
   }
 
-  private ensureIdleAnimation(): void {
+  /**
+   * Wind-up warning. The old encounter only tinted the sprite, which is invisible against bright grass;
+   * a marker on the ground where the hit will land tells the player what to dodge and in which direction.
+   */
+  private showTelegraph(): void {
+    const kind = this.def.behavior === 'mushroom' ? 'burst' : this.def.behavior === 'bat' ? 'charge' : 'swipe';
+    const reach = this.def.behavior === 'mushroom' ? 0 : this.def.attack.range * 0.65;
+    this.telegraphSink?.(this.body.center.x + this.lastDir.x * reach, this.body.center.y + this.lastDir.y * reach, kind);
+    this.scene.tweens.add({ targets: this.sprite, scaleX: 1.16, scaleY: 0.86, duration: Math.max(90, this.def.attack.windup * 0.45), yoyo: true, ease: 'Sine.easeInOut' });
+  }
+
+  /** Supplied by CombatSystem so enemies can draw telegraphs without owning an Effects instance. */
+  telegraphSink: ((x: number, y: number, kind: 'swipe' | 'charge' | 'burst') => void) | null = null;
+
+  /** Gentle push so a group of chasers spreads into a crescent instead of stacking into one sprite. */
+  separateFrom(other: BaseEnemy, delta: number): void {
+    if (this.destroyed || other.destroyed || this.isDead || other.isDead) return;
+    const dx = this.body.center.x - other.body.center.x;
+    const dy = this.body.center.y - other.body.center.y;
+    const distanceSq = dx * dx + dy * dy;
+    const radius = 13;
+    if (distanceSq >= radius * radius || distanceSq < 0.0001) return;
+    const distance = Math.sqrt(distanceSq);
+    const push = ((radius - distance) / radius) * 46 * (delta / 16.67);
+    this.body.velocity.x += (dx / distance) * push;
+    this.body.velocity.y += (dy / distance) * push;
+  }
+
+  protected ensureIdleAnimation(): void {
     const key = `${this.def.texture}_idle`;
     if (!this.scene.anims.exists(key)) {
       const frameCount = this.def.boss ? 6 : 4;
@@ -230,7 +266,7 @@ export class BaseEnemy extends Actor implements Hittable {
     this.sprite.play(key);
   }
 
-  private die(info: DamageInfo): void {
+  protected die(info: DamageInfo): void {
     this.setState('dead');
     this.body.velocity.set(0, 0);
     this.body.enable = false;

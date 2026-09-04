@@ -106,6 +106,15 @@ export class Player extends Actor implements Hittable {
     this.sprite.play(Anim.hero(state, facing), true);
   }
 
+  /** Attack and roll animations are stretched to the exact length of their combat state so nothing outlives it. */
+  playAttackAnim(timeScale: number): void {
+    this.sprite.play({ key: Anim.hero('attack', this.facing), timeScale });
+  }
+
+  playRollAnim(timeScale: number): void {
+    this.sprite.play({ key: Anim.hero('roll', this.facing), timeScale });
+  }
+
   setFacing(f: Facing): void {
     if (f === this.facing) return;
     this.facing = f;
