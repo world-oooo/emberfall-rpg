@@ -1,0 +1,33 @@
+{
+  "name": "emberfall-rpg",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Emberfall - a small, complete 2D top-down action RPG vertical slice for the web (Phaser 4 + TypeScript + Vite).",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "maps:build": "node --experimental-transform-types tools/maps/build-maps.ts",
+    "maps:validate": "node --experimental-transform-types tools/maps/validate-maps.ts",
+    "check": "npm run typecheck && npm run test && npm run maps:validate"
+  },
+  "dependencies": {
+    "idb-keyval": "~6.3.0",
+    "phaser": "4.2.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "~1.62.1",
+    "@types/node": "^24.0.0",
+    "typescript": "~5.9.3",
+    "vite": "~8.2.2",
+    "vitest": "~5.0.0"
+  }
+}

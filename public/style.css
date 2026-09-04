@@ -1,0 +1,85 @@
+/* Browser shell around the game canvas. The game itself renders inside #game-container. */
+:root {
+  color-scheme: dark;
+  --shell-bg: #0b0a12;
+  --shell-vignette: #1a1626;
+  --shell-fg: #d9d2c5;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--shell-bg);
+  color: var(--shell-fg);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, var(--shell-vignette) 0%, var(--shell-bg) 70%);
+}
+
+#game-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+#game-container canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  outline: none;
+}
+
+/* Shown until the Phaser canvas boots; removed by main.ts. */
+#boot-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  pointer-events: none;
+  letter-spacing: 0.35em;
+}
+
+#boot-fallback .boot-title {
+  font-size: 28px;
+  color: #f0b45a;
+  text-shadow: 0 0 18px rgba(240, 180, 90, 0.35);
+}
+
+#boot-fallback .boot-sub {
+  font-size: 12px;
+  opacity: 0.6;
+  letter-spacing: 0.2em;
+}
+
+#boot-fallback[hidden] {
+  display: none;
+}
+
+#boot-fallback.is-error .boot-title {
+  color: #e05656;
+}
+
+.noscript {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+}
