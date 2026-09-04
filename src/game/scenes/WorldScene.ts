@@ -10,7 +10,7 @@ import { getDialogue, type DialogueNode, type DialogueOption } from '../data/dia
 import { getEnemy } from '../data/enemies';
 import { getItem } from '../data/items';
 import { rollLoot } from '../data/loot';
-import { getMapDef, type MapDefinition } from '../data/maps';
+import { getMapDef, type MapDefinition, MAPS } from '../data/maps';
 import { getQuest } from '../data/quests';
 import { DebugOverlay } from '../debug/DebugOverlay';
 import type { BaseEnemy } from '../entities/enemies/BaseEnemy';
@@ -30,7 +30,7 @@ import { QuestSystem, type QuestUpdate } from '../systems/QuestSystem';
 import { SaveSystem } from '../systems/SaveSystem';
 import { SettingsStore } from '../systems/SettingsStore';
 import { dialogueId } from '../types/ids';
-import { findObjects, findSpawn, loadTiledMap, propStr, type LoadedMap } from '../world/MapLoader';
+import { findObjects, findSpawn, loadTiledMap, propStr, type LoadedMap, propNum, type TiledObject } from '../world/MapLoader';
 import type { UIScene } from './UIScene';
 
 export interface WorldSceneData {
@@ -200,6 +200,11 @@ export class WorldScene extends Phaser.Scene {
     });
     this.transitions = new MapTransitionSystem(this);
 
+    for (const object of this.loaded.objects.Interactables ?? []) {
+      if (object.type !== 'Seal') continue;
+      if (this.session.save.flags[propStr(object, 'openFlag', 'seal_open')]) this.openSealTiles(object);
+    }
+
     this.cameraZones.length = 0;
     for (const object of findObjects(this.loaded, 'Camera', 'CameraBounds')) {
       this.cameraZones.push(new Phaser.Geom.Rectangle(object.x, object.y, object.width, object.height));
@@ -210,17 +215,21 @@ export class WorldScene extends Phaser.Scene {
     this.cameraFollow.setLookAheadDistance(Feel.cameraLookAhead);
     this.cameraFollow.snap();
     this.cameraFollow.update(0);
-    this.cameras.main.fadeIn(350, 0, 0, 0);
+    this.cameras.main.fadeIn(260, 0, 0, 0);
     this.bindEvents();
     this.audio.playMusic(this.mapDef.music);
 
     if (!this.scene.isActive('UIScene')) this.scene.launch('UIScene');
     this.scene.bringToTop('UIScene');
+    this.ui?.hideTransition();
     this.ui?.showMapName(this.mapDef.displayName);
     this.ui?.refreshAll();
     gameEvents.emit('areaEntered', { mapId: this.mapDef.id });
     this.applyQuestUpdates(this.quests.recordAreaEntered(this.mapDef.id));
     void this.autosave();
+
+    // Once this map is running, quietly pull in whatever the doors lead to so the next transition is instant.
+    this.time.delayedCall(500, () => this.prefetchNeighbours());
 
     if (import.meta.env.DEV && new URLSearchParams(location.search).has('debug')) this.debug = new DebugOverlay(this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.shutdownSystems());
@@ -326,6 +335,10 @@ export class WorldScene extends Phaser.Scene {
   private interactWithObject(id: string, kind: InteractableKind): void {
     const object = (this.loaded.objects.Interactables ?? []).find((entry) => propStr(entry, 'interactionId', entry.name) === id);
     const text = propStr(object, 'text', 'Nothing stirs.');
+    if (kind === 'seal') {
+      this.useSeal(object);
+      return;
+    }
     if (id === 'ember_pedestal') {
       if (!this.session.save.defeatedBosses.includes('boss_racoon')) {
         this.ui?.showToast('The corrupted Guardian still watches the Ember.');
@@ -407,7 +420,17 @@ export class WorldScene extends Phaser.Scene {
       if (!this.session.save.defeatedBosses.includes(enemyId)) this.session.save.defeatedBosses.push(enemyId);
       this.session.save.flags[`boss.${spawnId}.defeated`] = true;
       if (!this.inventory.has('broken_mask')) this.addLoot([{ itemId: 'broken_mask', quantity: 1 }]);
-      this.audio.playMusic('victory');
+      // Death beat: freeze, cut the music, flash, then let the victory cue land in the silence.
+      this.combat.hitStop.request(320);
+      this.audio.stopMusic(220);
+      this.combat.effectsLayer.shake(true);
+      this.cameras.main.flash(360, 255, 214, 160);
+      this.bossMusicActive = false;
+      this.time.delayedCall(760, () => {
+        this.audio.playMusic('victory', { fadeOutMs: 0, fadeInMs: 500 });
+        this.releaseCameraZone();
+        this.cameraFollow.snap();
+      });
       this.ui?.showToast('The Mask Keeper falls. The Ember is within reach.');
     } else this.addLoot(rollLoot(`enemy_${enemyId}`));
     void this.autosave();
@@ -483,7 +506,7 @@ export class WorldScene extends Phaser.Scene {
     }
     if (!this.bossMusicActive) {
       this.bossMusicActive = true;
-      this.audio.playMusic('boss');
+      this.audio.playMusic('boss', { fadeOutMs: 150, fadeInMs: 200 });
       if (boss instanceof BossEnemy) boss.wake();
       else this.audio.playSfx('boss_roar');
       if (zone) this.applyCameraZone(zone);
@@ -492,9 +515,28 @@ export class WorldScene extends Phaser.Scene {
     this.ui?.showBoss(boss.def.name, boss.health.current, boss.health.max);
   }
 
+  /**
+   * Frames a room. A zone smaller than the visible area would leave the camera showing the void outside the
+   * map, so the zone is grown to at least the view size and then clamped inside the map.
+   */
   private applyCameraZone(zone: Phaser.Geom.Rectangle): void {
+    const camera = this.cameras.main;
+    const viewWidth = camera.width / camera.zoomX;
+    const viewHeight = camera.height / camera.zoomY;
+    let width = Math.min(this.loaded.widthPx, Math.max(zone.width, Math.ceil(viewWidth)));
+    let height = Math.min(this.loaded.heightPx, Math.max(zone.height, Math.ceil(viewHeight)));
+    let x = Phaser.Math.Clamp(zone.centerX - width / 2, 0, Math.max(0, this.loaded.widthPx - width));
+    let y = Phaser.Math.Clamp(zone.centerY - height / 2, 0, Math.max(0, this.loaded.heightPx - height));
+    if (width >= this.loaded.widthPx) {
+      width = this.loaded.widthPx;
+      x = 0;
+    }
+    if (height >= this.loaded.heightPx) {
+      height = this.loaded.heightPx;
+      y = 0;
+    }
     this.cameraZoneActive = true;
-    this.cameras.main.setBounds(zone.x, zone.y, zone.width, zone.height);
+    camera.setBounds(Math.round(x), Math.round(y), Math.round(width), Math.round(height));
   }
 
   private releaseCameraZone(): void {
@@ -597,6 +639,72 @@ export class WorldScene extends Phaser.Scene {
     this.addLoot([{ itemId, quantity }]);
     this.ui?.showToast(`Bought ${item.name}${quantity > 1 ? ` x${quantity}` : ''}.`);
     void this.autosave();
+  }
+
+  /**
+   * A key-gated barrier. Opening it removes the collision and the tiles for good, recorded on a world flag
+   * so a reload keeps the way open.
+   */
+  private useSeal(object: TiledObject | undefined): void {
+    if (!object) return;
+    const flag = propStr(object, 'openFlag', 'seal_open');
+    if (this.session.save.flags[flag]) return;
+    const required = propStr(object, 'requiredItem');
+    if (required && !this.inventory.has(required)) {
+      this.ui?.showToast(propStr(object, 'lockedMessage', 'It is sealed.'));
+      this.audio.playSfx('menu_cancel');
+      return;
+    }
+    this.session.save.flags[flag] = true;
+    this.openSealTiles(object);
+    this.audio.playSfx('door');
+    this.combat.effectsLayer.shake(true);
+    this.ui?.showToast(propStr(object, 'openMessage', 'The seal opens.'));
+    void this.autosave();
+  }
+
+  /** Clears the barrier tiles and their collision. Also runs on map load when the flag is already set. */
+  private openSealTiles(object: TiledObject): void {
+    const gx = propNum(object, 'gateX');
+    const gy = propNum(object, 'gateY');
+    const width = Math.max(1, propNum(object, 'gateWidth', 1));
+    for (let x = gx; x < gx + width; x += 1) {
+      this.loaded.collision?.removeTileAt(x, gy);
+      for (const layer of Object.values(this.loaded.layers)) layer.removeTileAt(x, gy);
+    }
+  }
+
+  /**
+   * Warms the browser cache for every map reachable through a door on this one. Plain fetches, not the
+   * Phaser loader: queuing into the scene loader raced with map transitions and re-registered texture keys
+   * that were still in flight. Network time is the dominant cost of a cold map, so this recovers most of it
+   * without touching the texture manager.
+   */
+  private prefetchNeighbours(): void {
+    if (!this.scene.isActive()) return;
+    const destinations = new Set<string>();
+    for (const object of findObjects(this.loaded, 'Doors', 'Door')) {
+      const destination = propStr(object, 'destinationMap');
+      if (destination && destination !== this.mapDef.id) destinations.add(destination);
+    }
+    const paths: string[] = [];
+    for (const id of destinations) {
+      const def = MAPS[id];
+      if (!def) continue;
+      if (!this.cache.tilemap.exists(mapKey(def.id))) paths.push(`maps/${def.file}`);
+      for (const tileset of def.tilesets) if (!this.textures.exists(tileset)) paths.push(`tiles/${tileset}.png`);
+      for (const npc of def.npcs) {
+        if (this.textures.exists(npcTexture(npc))) continue;
+        paths.push(`characters/npcs/${npc}.png`, `characters/npcs/${npc}_face.png`);
+      }
+      for (const enemy of def.enemies) {
+        if (this.textures.exists(enemyTexture(enemy))) continue;
+        if (enemy === 'boss_racoon') paths.push('enemies/boss_racoon_idle.png');
+        else paths.push(`enemies/${enemy}.png`);
+      }
+      if (!this.cache.audio.exists(musicKey(def.music))) paths.push(`audio/music/${def.music}.ogg`);
+    }
+    for (const path of paths) void fetch(`${ASSET_ROOT}${path}`, { cache: 'force-cache' }).catch(() => undefined);
   }
 
   /** Boss sheets are four separate strips, so the animations are built here once per map load. */

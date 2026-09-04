@@ -4,11 +4,16 @@ export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: process.env.CI ? 2 : 1,
   reporter: process.env.CI ? 'github' : 'list',
+  // Software WebGL makes a cold map load ~3 s, so the stock 30 s / 5 s budgets are too tight.
+  timeout: 90_000,
+  expect: { timeout: 15_000 },
   use: {
     baseURL: 'http://127.0.0.1:5180',
-    trace: 'retain-on-failure',
+    // Trace snapshots of a full-window WebGL canvas cost seconds per action under SwiftShader and were
+    // themselves causing timeouts, so they are recorded only on the retry of a failing test.
+    trace: 'on-first-retry',
     launchOptions: {
       args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'],
     },

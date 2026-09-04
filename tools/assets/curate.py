@@ -99,6 +99,20 @@ def npc_walk_sheet(folder: str, dst: str) -> None:
     print(f"  sheet {dst} (expanded from 64x32)")
 
 
+def transcode_music(src: str, dst: str) -> None:
+    """Re-encode looping music to ~112 kbps stereo.
+
+    The pack ships 195-260 kbps tracks; at 16 MB total they dominated both the download and the decode time
+    on every area transition. Quality 3 is transparent for this material and cuts the set by about 60%.
+    """
+    s = PACK / src
+    d = OUT / dst
+    d.parent.mkdir(parents=True, exist_ok=True)
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(s), "-c:a", "libvorbis", "-q:a", "3", "-ar", "44100", str(d)]
+    subprocess.run(cmd, check=True)
+    print(f"  music {dst} ({d.stat().st_size // 1024} KB)")
+
+
 def transcode(src: str, dst_base: str) -> None:
     """WAV -> OGG (primary) + MP3 (fallback)."""
     s = PACK / src
@@ -272,7 +286,7 @@ def main() -> int:
         "victory": "15 - Credit Theme.ogg",
     }
     for key, name in music.items():
-        copy(f"Audio/Musics/{name}", f"audio/music/{key}.ogg")
+        transcode_music(f"Audio/Musics/{name}", f"audio/music/{key}.ogg")
 
     print("sfx")
     sfx = {

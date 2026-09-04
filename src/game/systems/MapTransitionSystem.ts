@@ -15,7 +15,7 @@ export class MapTransitionSystem {
 
   constructor(private readonly scene: WorldScene) {
     for (const o of findObjects(scene.loaded, 'Doors', 'Door')) this.addDoor(o);
-    scene.time.delayedCall(400, () => {
+    scene.time.delayedCall(260, () => {
       this.armed = true;
     });
   }
@@ -60,7 +60,8 @@ export class MapTransitionSystem {
     scene.player.body.velocity.set(0, 0);
     scene.sound.play(sfxKey('door'), { volume: 0.4 });
     scene.session.pendingSpawn = { mapId, spawnId };
-    scene.cameras.main.fadeOut(260, 0, 0, 0);
+    scene.ui?.showTransition();
+    scene.cameras.main.fadeOut(180, 0, 0, 0);
     scene.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
       void scene.saveForTransition(mapId, spawnId).finally(() => scene.scene.restart({ mapId, spawnId }));
     });

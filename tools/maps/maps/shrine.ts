@@ -158,12 +158,22 @@ export function buildShrine(): string {
   statue(13, 19, true);
   statue(16, 19, true);
   m.enemy('skeleton', 15, 18, 'shrine_skeleton_04');
-  m.door(13, 13, 4, 1, 'shrine', 'boss_gate', {
-    locked: true,
+  // The stair is barred by a gate, not a doorway: a same-map door teleported the player back onto its own
+  // trigger, which meant they could never walk south out of the arena again.
+  for (let x = 13; x <= 16; x += 1) {
+    m.below.set(x, 13, m.b.gid(DUNGEON, 44));
+    m.solid(x, 13);
+  }
+  m.interactable('Seal', 'shrine_seal', 15, 14, {
     requiredItem: 'shrine_key',
+    openFlag: 'shrine.seal_open',
     lockedMessage: 'A cold seal bars the way. The shrine key should fit here.',
+    openMessage: 'The shrine key turns. The seal grinds open.',
+    gateX: 13,
+    gateY: 13,
+    gateWidth: 4,
   });
-  m.sign('sign_shrine_seal', 15, 15, 'The guardian sleeps beyond the sealed stair.');
+  m.sign('sign_shrine_seal', 18, 15, 'The guardian sleeps beyond the sealed stair.');
 
   // Guardian arena: four pillars for cover, braziers along the back wall, ember pedestal behind the boss.
   pillar(9, 4);
@@ -180,16 +190,15 @@ export function buildShrine(): string {
   m.interactable('Shrine', 'ember_pedestal', 15, 2, { text: 'The stolen ember waits here, warm enough to carry home.' });
   m.below.set(15, 2, m.b.gid(INTERIOR, 74));
   m.solid(15, 2);
-  m.trigger('quest_sleeping_guardian', 'enter_boss_arena', arena.x, arena.y, arena.w, arena.h);
   m.cameraBounds('boss_arena', arena.x, arena.y, arena.w, arena.h);
 
-  // Quest triggers and transitions.
-  m.trigger('quest_sleeping_guardian', 'find_shrine_key', 3, 17, 9, 8);
+  // Quest triggers and transitions. The guardian quest advances on the key pickup, the boss kill and the
+  // ember, so it needs no area triggers of its own.
   m.trigger('quest_dimmed_shrine', 'reach_shrine', 10, 33, 10, 5, false);
   m.door(13, 39, 4, 1, 'woods', 'from_shrine');
   m.spawn('entrance', 15, 37, 'up');
   m.spawn('from_woods', 15, 37, 'up');
-  m.spawn('boss_gate', 15, 13, 'up');
+  m.spawn('boss_gate', 15, 12, 'up');
 
   return m.write();
 }

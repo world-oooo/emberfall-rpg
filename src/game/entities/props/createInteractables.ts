@@ -11,6 +11,7 @@ const KIND_BY_TILED_TYPE: Record<string, InteractableKind> = {
   Dummy: 'dummy',
   Savepoint: 'savepoint',
   EmberPedestal: 'emberPedestal',
+  Seal: 'seal',
 };
 
 export function createMapInteractables(

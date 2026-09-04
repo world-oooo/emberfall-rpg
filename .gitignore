@@ -32,3 +32,10 @@ vendor/
 
 # local OMX workflow state
 .omx/
+
+# python bytecode
+__pycache__/
+*.pyc
+
+# local browser-driving scratch
+.playwright-mcp/

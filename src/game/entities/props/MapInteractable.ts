@@ -21,6 +21,7 @@ const DEFAULT_PROMPTS: Record<InteractableKind, string> = {
   dummy: 'Inspect',
   savepoint: 'Save',
   emberPedestal: 'Place',
+  seal: 'Unseal',
 };
 
 export class MapInteractable implements Interactable {

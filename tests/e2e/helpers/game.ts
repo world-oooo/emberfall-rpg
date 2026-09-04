@@ -43,7 +43,7 @@ declare global {
       getSave: () => GameSave | null;
       getInventory: () => unknown;
       getQuests: () => unknown;
-      getSettings: () => { masterVolume: number; musicVolume: number; sfxVolume: number; screenShake: boolean; integerScaling: boolean; showHints: boolean };
+      getSettings: () => { masterVolume: number; musicVolume: number; sfxVolume: number; screenShake: boolean; displayMode: 'fill' | 'fixed'; showHints: boolean };
       getEnemies: () => unknown[];
       getActiveInteraction: () => string | null;
       startScene: (key: string, data?: object) => void;
@@ -100,4 +100,31 @@ export async function getEnemies(page: Page): Promise<EnemyState[]> {
 
 export async function damageEnemy(page: Page, spawnId: string, amount = 999): Promise<boolean> {
   return page.evaluate(({ id, damage }) => window.__GAME_TEST__?.damageEnemy(id, damage) ?? false, { id: spawnId, damage: amount });
+}
+
+/**
+ * Walks a whole conversation. Dialogue reveals letter by letter, so the first confirm only completes the
+ * reveal; keep confirming until the player leaves the interact state, which is when the box has closed.
+ */
+export async function talkTo(page: Page, x: number, y: number, facing = 'ArrowUp'): Promise<void> {
+  await teleport(page, x, y);
+  await page.keyboard.press(facing);
+  await page.waitForTimeout(150);
+  await page.keyboard.press('KeyE');
+  for (let i = 0; i < 15; i += 1) {
+    await page.waitForTimeout(250);
+    const state = await page.evaluate(() => window.__GAME_TEST__?.getPlayerState()?.state ?? null);
+    if (state !== 'interact') return;
+    await page.keyboard.press('Enter');
+  }
+}
+
+/** Closes any open dialogue or panel so a following key press reaches the world. */
+export async function clearModals(page: Page): Promise<void> {
+  for (let i = 0; i < 6; i += 1) {
+    const state = await page.evaluate(() => window.__GAME_TEST__?.getPlayerState()?.state ?? null);
+    if (state !== 'interact') return;
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
+  }
 }

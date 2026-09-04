@@ -19,6 +19,12 @@ const KNOWN_MAPS = ['village', 'woods', 'shrine'];
 const KNOWN_ENEMIES = ['slime', 'mushroom', 'bat', 'skeleton', 'boss_racoon'];
 const KNOWN_NPCS = ['elder_hana', 'master_ryo', 'merchant_botan', 'child_mimi', 'guard_goro', 'hermit_sen', 'villager_woman', 'villager_man'];
 const KNOWN_QUESTS = ['quest_dimmed_shrine', 'quest_sleeping_guardian', 'quest_lost_charm'];
+// A trigger naming an objective the quest does not define is silently dead at runtime, so list them here.
+const KNOWN_OBJECTIVES: Record<string, string[]> = {
+  quest_dimmed_shrine: ['talk_ryo', 'reach_woods', 'defeat_slimes', 'reach_shrine'],
+  quest_sleeping_guardian: ['find_key', 'defeat_guardian', 'take_ember', 'return_hana', 'relight_shrine'],
+  quest_lost_charm: ['find_charm', 'return_mimi'],
+};
 const KNOWN_LOOT = ['chest_coins_small', 'chest_potion', 'chest_shuriken', 'chest_fox_charm', 'chest_shrine_key', 'chest_coins_big', 'chest_heavy_blade'];
 
 const errors: string[] = [];
@@ -92,7 +98,9 @@ for (const [id, m] of maps) {
         }
         case 'QuestTrigger': {
           const q = String(p(o, 'questId'));
+          const objective = String(p(o, 'objectiveId'));
           if (!KNOWN_QUESTS.includes(q)) errors.push(`${tag} unknown questId ${q}`);
+          else if (!KNOWN_OBJECTIVES[q]?.includes(objective)) errors.push(`${tag} quest ${q} has no objective ${objective}`);
           break;
         }
         default:

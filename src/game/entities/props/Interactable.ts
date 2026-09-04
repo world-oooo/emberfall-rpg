@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
 import type { GameSession } from '../../core/session';
 
-export type InteractableKind = 'npc' | 'sign' | 'chest' | 'shrine' | 'dummy' | 'savepoint' | 'emberPedestal';
+export type InteractableKind = 'npc' | 'sign' | 'chest' | 'shrine' | 'dummy' | 'savepoint' | 'emberPedestal' | 'seal';
 
 export interface InteractionContext {
   scene: Phaser.Scene;

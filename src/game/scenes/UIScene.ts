@@ -62,7 +62,10 @@ export class UIScene extends Phaser.Scene {
   private dialogueChoices: Phaser.GameObjects.BitmapText | null = null;
   private dialogueReveal = 0;
   private dialogueFullText = '';
+  private dialogueBodyTop = 28;
 
+  private transition: Phaser.GameObjects.Container | null = null;
+  private transitionTimer: Phaser.Time.TimerEvent | null = null;
   private special: Phaser.GameObjects.Container | null = null;
   private specialAction: (() => void) | null = null;
   private modalReadyAt = 0;
@@ -278,23 +281,30 @@ export class UIScene extends Phaser.Scene {
     this.modalReadyAt = this.time.now + 180;
 
     const width = Math.min(this.w - 28, 380);
-    const height = 78;
     const hasPortrait = Boolean(node.portrait && this.textures.exists(node.portrait));
+    const textX = hasPortrait && node.portrait ? 60 : 14;
+    const textWidth = width - textX - 14;
+
+    // The box is sized to its longest line plus the choices, so a wrapped line can never land on top of them.
+    this.dialogueBodyTop = 28;
+    const bodyHeight = Math.max(...node.lines.map((line) => this.measureWrapped(line, textWidth)), 10);
+    const choiceText = node.options?.length ? node.options.map((option) => `> ${option.label}`).join('\n') : '';
+    const choicesHeight = choiceText ? this.measureWrapped(choiceText, textWidth) + 6 : 0;
+    const height = Math.max(78, this.dialogueBodyTop + bodyHeight + choicesHeight + 16);
+
     const frame = new NinePanel(this, 0, 0, width, height, Tex.panelWood);
     const inner = new Plate(this, width - 14, height - 14, { radius: 2, fill: 0x1a1720, alpha: 0.93 });
     inner.setPosition(7, 7);
     const items: Phaser.GameObjects.GameObject[] = [frame, inner];
 
-    let textX = 14;
     if (hasPortrait && node.portrait) {
       const portraitFrame = new Plate(this, 42, 42, { radius: 2, fill: 0x0d0b12, alpha: 0.95, stroke: UiColor.ember, strokeAlpha: 0.55 });
       portraitFrame.setPosition(12, 22);
       items.push(portraitFrame, this.add.image(33, 43, node.portrait).setDisplaySize(38, 38));
-      textX = 60;
     }
     const speaker = this.add.bitmapText(textX, 14, Tex.font, this.displayName(node.speakerId), 8).setTint(UiColor.emberBright);
-    this.dialogueBody = this.add.bitmapText(textX, 28, Tex.font, '', 8).setTint(UiColor.text).setMaxWidth(width - textX - 14);
-    this.dialogueChoices = this.add.bitmapText(textX, 50, Tex.font, '', 8).setTint(UiColor.good).setMaxWidth(width - textX - 14);
+    this.dialogueBody = this.add.bitmapText(textX, this.dialogueBodyTop, Tex.font, '', 8).setTint(UiColor.text).setMaxWidth(textWidth);
+    this.dialogueChoices = this.add.bitmapText(textX, this.dialogueBodyTop + bodyHeight + 6, Tex.font, '', 8).setTint(UiColor.good).setMaxWidth(textWidth);
     const hint = this.add.bitmapText(width - 12, height - 17, Tex.font, 'E', 8).setOrigin(1, 0).setTint(UiColor.textFaint);
     items.push(speaker, this.dialogueBody, this.dialogueChoices, hint);
 
@@ -303,6 +313,14 @@ export class UIScene extends Phaser.Scene {
       .setDepth(Depth.UI + 10);
     this.renderDialogue();
     this.sound.play(sfxKey('dialogue_blip'), { volume: 0.25 });
+  }
+
+  /** Height a wrapped bitmap line will occupy, measured once so layout can reserve room for it. */
+  private measureWrapped(text: string, maxWidth: number): number {
+    const probe = this.add.bitmapText(0, 0, Tex.font, text, 8).setMaxWidth(maxWidth);
+    const height = probe.height;
+    probe.destroy();
+    return Math.ceil(height);
   }
 
   private renderDialogue(): void {
@@ -373,6 +391,32 @@ export class UIScene extends Phaser.Scene {
       this.setWorldLocked(false);
       callback?.();
     }
+  }
+
+  /**
+   * Shown while a map loads behind the fade. It only appears if the load actually takes a moment, so short
+   * cached transitions stay clean; a first visit no longer looks like the game froze.
+   */
+  showTransition(): void {
+    this.transitionTimer?.remove(false);
+    this.transitionTimer = this.time.delayedCall(320, () => {
+      if (this.transition) return;
+      const label = this.add.bitmapText(0, 0, Tex.font, 'ENTERING', 8).setOrigin(0.5, 0.5).setTint(UiColor.textDim);
+      const ember = this.add.image(0, -18, itemTexture('scroll_fire')).setOrigin(0.5);
+      this.tweens.add({ targets: ember, scale: { from: 0.85, to: 1.15 }, alpha: { from: 0.65, to: 1 }, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.transition = this.add
+        .container(Math.round(this.w / 2), Math.round(this.h / 2), [ember, label])
+        .setDepth(Depth.UI + 30)
+        .setAlpha(0);
+      this.tweens.add({ targets: this.transition, alpha: 1, duration: 200 });
+    });
+  }
+
+  hideTransition(): void {
+    this.transitionTimer?.remove(false);
+    this.transitionTimer = null;
+    this.transition?.destroy(true);
+    this.transition = null;
   }
 
   // ---------------------------------------------------------------- boss
