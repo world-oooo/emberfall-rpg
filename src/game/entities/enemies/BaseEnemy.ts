@@ -88,6 +88,9 @@ export class BaseEnemy extends Actor implements Hittable {
 
     if (this.state === 'attack') {
       this.performAttack(spawnHitbox);
+      // The Hollow Guard commits: it steps through the swing, so the strike reads as an attack you dodge
+      // rather than as contact damage you walk into.
+      if (this.def.behavior === 'skeleton') this.body.velocity.set(this.lastDir.x * this.def.speed * 1.7, this.lastDir.y * this.def.speed * 1.7);
       if (this.stateElapsed >= this.def.attack.active) {
         this.cooldownUntil = this.scene.time.now + this.def.attack.cooldown;
         this.setState('cooldown');
@@ -96,7 +99,9 @@ export class BaseEnemy extends Actor implements Hittable {
     }
 
     if (this.state === 'cooldown') {
-      this.body.velocity.set(0, 0);
+      // Bats swoop and peel away; everything else holds still, which is the player's window to punish.
+      if (this.def.behavior === 'bat' && this.stateElapsed < 320) this.moveAwayFrom(target, this.def.speed * 0.9);
+      else this.body.velocity.set(0, 0);
       if (this.scene.time.now >= this.cooldownUntil) this.setState(distance <= this.def.aggroRange ? 'chase' : 'idle');
       return;
     }
@@ -108,7 +113,7 @@ export class BaseEnemy extends Actor implements Hittable {
       return;
     }
 
-    if (distance <= this.def.attack.range && this.scene.time.now >= this.cooldownUntil) {
+    if (distance <= this.def.attack.range && this.scene.time.now >= this.cooldownUntil && (this.attackGate?.(this) ?? true)) {
       this.setState('windup');
       return;
     }
@@ -237,6 +242,22 @@ export class BaseEnemy extends Actor implements Hittable {
 
   /** Supplied by CombatSystem so enemies can draw telegraphs without owning an Effects instance. */
   telegraphSink: ((x: number, y: number, kind: 'swipe' | 'charge' | 'burst') => void) | null = null;
+
+  /**
+   * Asked before an enemy commits to a wind-up. CombatSystem uses it to keep a pack from swinging in unison:
+   * two attackers at a time is readable, five is a wall of damage with nothing to dodge.
+   */
+  attackGate: ((enemy: BaseEnemy) => boolean) | null = null;
+
+  /** True while this enemy is winding up or swinging, so the arbiter can count committed attackers. */
+  get isCommittedToAttack(): boolean {
+    return this.state === 'windup' || this.state === 'attack';
+  }
+
+  /** Current AI state name, exposed for the DEV test bridge. */
+  get stateName(): string {
+    return this.state;
+  }
 
   /** Gentle push so a group of chasers spreads into a crescent instead of stacking into one sprite. */
   separateFrom(other: BaseEnemy, delta: number): void {

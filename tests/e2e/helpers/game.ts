@@ -31,6 +31,7 @@ export interface EnemyState {
   x: number;
   y: number;
   dead: boolean;
+  state: string;
 }
 
 declare global {

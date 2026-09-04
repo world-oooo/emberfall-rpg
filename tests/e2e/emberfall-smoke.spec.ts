@@ -350,3 +350,41 @@ test('opens the hidden grove chest in the village', async ({ page, errorWatcher 
 
   await expect.poll(async () => (await getSave(page)).player.coins).toBeGreaterThan(coinsBefore);
 });
+
+test('never lets more than two regular enemies swing at once', async ({ page, errorWatcher }) => {
+  test.setTimeout(90_000);
+  void errorWatcher;
+
+  await openGame(page);
+  await startNewGame(page);
+  await teleport(page, 328, 472);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('woods');
+  await teleport(page, 808, 80);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('shrine');
+  await page.waitForTimeout(1200);
+
+  // The bat gallery puts two bats and a Hollow Guard inside one aggro radius. Sampled in-page: a wind-up
+  // lasts 120-280 ms, which a poll driven from Node would step straight over.
+  const observed = await page.evaluate(async () => {
+    const bridge = window.__GAME_TEST__;
+    if (!bridge) return null;
+    const engaged = new Set<string>();
+    let peak = 0;
+    for (let i = 0; i < 170; i += 1) {
+      bridge.teleport(330, 320);
+      bridge.healPlayer();
+      const live = (bridge.getEnemies() as Array<{ spawnId: string; state: string; dead: boolean }>).filter((enemy) => !enemy.dead);
+      const committed = live.filter((enemy) => enemy.state === 'windup' || enemy.state === 'attack');
+      for (const enemy of committed) engaged.add(enemy.spawnId);
+      peak = Math.max(peak, committed.length);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return { peak, engaged: engaged.size };
+  });
+
+  expect(observed).not.toBeNull();
+  if (!observed) return;
+  // More than two enemies took turns, and never more than two were committed at the same moment.
+  expect(observed.engaged).toBeGreaterThan(2);
+  expect(observed.peak).toBeLessThanOrEqual(2);
+});

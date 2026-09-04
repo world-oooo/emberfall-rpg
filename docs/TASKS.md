@@ -29,8 +29,6 @@
 
 ## Known limitations
 
-- Three of the four regular enemy archetypes still close distance and touch the player; only the bat moves
-  differently before the boss.
 - No input rebinding. The keyboard layouts are generous but fixed.
 - One environmental puzzle in the whole game (the shrine braziers).
 - Save export/import and a dedicated fullscreen toggle are not exposed in the current UI.

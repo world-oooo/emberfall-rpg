@@ -25,8 +25,8 @@ one boss, and a single optional puzzle.
 | Attack Feel | **2** | 4 | Logic matches the 240 ms animation, buffer, combo, cancel window |
 | Roll Feel | **2** | 4 | 300 ms logic against a 214 ms clip stretched to fit |
 | Hit Feedback | 3 | 4 | Owned hitstop controller instead of an inverted timeScale |
-| Enemy Readability | **2** | 3 | Shaped, coloured telegraphs per attack kind |
-| Enemy Variety | 3 | 3 | Four archetypes, unchanged |
+| Enemy Readability | **2** | 4 | Shaped telegraphs per attack kind, and at most two attackers at once |
+| Enemy Variety | 3 | 4 | Hop, kite-and-burst, swoop-and-peel, commit-and-lunge |
 | Boss Design | **1** | 4 | Own controller, three attacks, two phases, arena sequence |
 | HUD | **1** | 4 | Rounded plates, hearts, level, coins, objective, boss bar |
 | Dialogue UI | 2 | 4 | Portrait frame, typewriter, box sized from its longest line |
@@ -68,6 +68,14 @@ The Mask Keeper has its own state machine: swipe, charge and spirit burst, each 
 a second phase at half health that changes the attack mix and chains combos. Entering the arena locks the
 camera, wakes the boss and swaps the music; its death gets hitstop, a flash and silence before the victory cue.
 
+### P1 — enemies
+
+An attack arbiter in `CombatSystem` lets at most two regular enemies be committed to a wind-up or swing at
+once; the rest circle. A pack that all swings together is a wall of damage with nothing to read. Each
+archetype now moves differently as well: the slime hops, the Sporecap backs off and bursts at range, the bat
+swoops and peels away during its cooldown, and the Hollow Guard steps through its swing so the strike reads as
+an attack you dodge rather than contact damage you walk into.
+
 ### P1 — UI and world
 
 Every surface is laid out from `Display.width/height` and re-anchors on resize. The shrine was rebuilt as
@@ -76,7 +84,7 @@ collision tile on bare dirt and is now an actual building, which the ending ligh
 
 ### P2 — QA
 
-Fourteen end-to-end tests, sixteen unit tests, map validation, a scripted screenshot baseline and a scripted
+Fifteen end-to-end tests, sixteen unit tests, map validation, a scripted screenshot baseline and a scripted
 measurement pass. See [TESTING.md](TESTING.md).
 
 ## Measured data
@@ -127,7 +135,6 @@ Recorded because each was invisible from reading the code alone:
 
 ## What is still weak
 
-- **Enemy variety.** Three of the four regular archetypes still play as "walk at the player".
 - **Content volume.** Three maps and one boss. That is the deliberate scope, but it caps the ceiling.
 - **No input rebinding.** Keyboard layouts are generous but fixed.
 - **One puzzle.** The brazier vault is the only non-combat problem in the game.

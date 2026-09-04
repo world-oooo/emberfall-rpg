@@ -9,6 +9,9 @@ import type { BaseEnemy } from '../entities/enemies/BaseEnemy';
 import { Hitbox, type HitboxConfig, type Hittable } from './Hitbox';
 import { HitStopController } from './HitStop';
 
+/** How many regular enemies may be winding up or swinging at the same moment. */
+const MAX_SIMULTANEOUS_ATTACKERS = 2;
+
 /**
  * Runtime glue for hitboxes and hittables. WorldScene can own one instance and call update(delta).
  */
@@ -55,6 +58,7 @@ export class CombatSystem {
   spawnEnemy(spawn: EnemySpawnInput): BaseEnemy {
     const enemy = createEnemy(this.scene, spawn, this.bossWorld ?? undefined);
     enemy.telegraphSink = (x, y, kind) => this.effects.telegraph(x, y, kind);
+    enemy.attackGate = (candidate) => this.canCommitAttack(candidate);
     this.enemies.push(enemy);
     this.scene.physics.add.collider(this.player.sprite, enemy.sprite);
     if (this.collisionLayer) this.scene.physics.add.collider(enemy.sprite, this.collisionLayer);
@@ -95,6 +99,21 @@ export class CombatSystem {
       }
     }
     this.cleanup();
+  }
+
+  /**
+   * Attack arbiter. A pack that all swings at once is a wall of damage with nothing to read, so only two
+   * regular enemies may be committed at a time. A boss is never gated: its own controller owns its pacing.
+   */
+  private canCommitAttack(candidate: BaseEnemy): boolean {
+    if (candidate.def.boss) return true;
+    let committed = 0;
+    for (const enemy of this.enemies) {
+      if (enemy === candidate || enemy.isDead || enemy.isDestroyed || enemy.def.boss) continue;
+      if (enemy.isCommittedToAttack) committed += 1;
+      if (committed >= MAX_SIMULTANEOUS_ATTACKERS) return false;
+    }
+    return true;
   }
 
   getLivingEnemies(): BaseEnemy[] {

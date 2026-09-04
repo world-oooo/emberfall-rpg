@@ -58,6 +58,7 @@ export function installTestBridge(game: Phaser.Game): void {
       x: enemy.x,
       y: enemy.y,
       dead: enemy.isDead,
+      state: enemy.stateName,
     })) ?? [],
     getActiveInteraction: () => world()?.interactions?.getActive()?.id ?? null,
     startScene: (key, data) => game.scene.start(key, data),

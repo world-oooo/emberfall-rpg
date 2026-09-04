@@ -9,7 +9,7 @@ produce evidence rather than pass/fail results.
 |---|---|
 | `npm run check` | Strict TypeScript, unit tests, generated-map validation |
 | `npm run build` | Production bundle; catches missing or misreferenced runtime assets |
-| `npm run test:e2e` | Fourteen Playwright tests against the real WebGL canvas |
+| `npm run test:e2e` | Fifteen Playwright tests against the real WebGL canvas |
 | `npm run test:perf` | Measurement pass → `artifacts/measurements.md` |
 | `npm run test:shots` | Screenshot baseline → `artifacts/playthrough/*.png` |
 
@@ -18,7 +18,7 @@ slow and assert almost nothing. They exist to produce numbers and images you can
 
 ## Browser suite
 
-Fourteen tests, all of which fail on any unexpected console error or page error:
+Fifteen tests, all of which fail on any unexpected console error or page error:
 
 1. Boots to a WebGL canvas on the main menu.
 2. The canvas fills the browser window.
@@ -34,6 +34,7 @@ Fourteen tests, all of which fail on any unexpected console error or page error:
 12. The full Ember quest: both quests, boss, ending, save, reload, Continue.
 13. The shrine braziers open the keepers' vault, and the shortcut unbars.
 14. The hidden grove chest in the village pays out.
+15. No more than two regular enemies are committed to an attack at the same moment.
 
 ### Two harness lessons worth keeping
 
