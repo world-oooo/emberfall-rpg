@@ -2,6 +2,7 @@ import type Phaser from 'phaser';
 import { hasSession, getSession } from '../core/session';
 import type { WorldScene } from '../scenes/WorldScene';
 import { SettingsStore, type Settings } from '../systems/SettingsStore';
+import { Display, type DisplayLayout } from '../systems/DisplaySystem';
 
 /**
  * DEV-only read-mostly API for Playwright: window.__GAME_TEST__.
@@ -17,12 +18,14 @@ export interface GameTestBridge {
   getInventory: () => unknown;
   getQuests: () => unknown;
   getSettings: () => Settings;
+  getDisplay: () => DisplayLayout;
   getEnemies: () => unknown[];
   getActiveInteraction: () => string | null;
   startScene: (key: string, data?: object) => void;
   teleport: (x: number, y: number) => void;
   damageEnemy: (spawnId: string, amount?: number) => boolean;
   damagePlayer: (amount?: number) => boolean;
+  healPlayer: (amount?: number) => boolean;
   saveNow: () => Promise<void>;
 }
 
@@ -46,6 +49,7 @@ export function installTestBridge(game: Phaser.Game): void {
     getInventory: () => (hasSession() ? structuredClone(getSession().save.inventory) : null),
     getQuests: () => (hasSession() ? structuredClone(getSession().save.quests) : null),
     getSettings: () => structuredClone(SettingsStore.get()),
+    getDisplay: () => ({ ...Display.layout }),
     getEnemies: () => world()?.combat?.enemies.map((enemy) => ({
       enemyId: enemy.def.id,
       spawnId: enemy.spawnId,
@@ -86,6 +90,12 @@ export function installTestBridge(game: Phaser.Game): void {
         hitstop: 0,
         faction: 'enemy',
       });
+    },
+    healPlayer: (amount = 99) => {
+      const current = world();
+      if (!current) return false;
+      current.player.health.heal(amount);
+      return true;
     },
     saveNow: async () => {
       await world()?.autosave();

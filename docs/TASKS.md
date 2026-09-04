@@ -15,6 +15,10 @@
 - M10 — Responsive canvas, focus-safe input, keyboard capture and WebGL startup handling.
 - M11 — Unit tests, Playwright browser tests, screenshot review and map validation.
 - M12 — Complete acceptance playthrough, production build and player documentation.
+- M13 — Deep polish audit: fill-window display system, combat timing aligned to animation, owned hitstop
+  controller, dedicated boss controller with two phases, redesigned HUD and menus, rebuilt shrine interior.
+- M14 — World content and QA: real village shrine with an ending that lights it, hidden grove, brazier puzzle
+  and keepers' vault, shrine shortcut, post-ending dialogue, scripted screenshot and measurement passes.
 
 ## Later
 
@@ -25,5 +29,8 @@
 
 ## Known limitations
 
-- The shipped boss is a focused vertical-slice encounter with a telegraphed heavy strike rather than the three-pattern prototype described in the original concept document.
+- Three of the four regular enemy archetypes still close distance and touch the player; only the bat moves
+  differently before the boss.
+- No input rebinding. The keyboard layouts are generous but fixed.
+- One environmental puzzle in the whole game (the shrine braziers).
 - Save export/import and a dedicated fullscreen toggle are not exposed in the current UI.

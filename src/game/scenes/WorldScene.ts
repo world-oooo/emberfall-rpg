@@ -776,14 +776,21 @@ export class WorldScene extends Phaser.Scene {
     void this.autosave();
   }
 
-  /** Clears the barrier tiles and their collision. Also runs on map load when the flag is already set. */
+  /**
+   * Clears the barrier tiles and their collision. Also runs on map load when the flag is already set.
+   * Ground is left alone: the floor under a gate is already carved, and stripping it punched a black hole
+   * in the corridor where the gate used to be.
+   */
   private openSealTiles(object: TiledObject): void {
     const gx = propNum(object, 'gateX');
     const gy = propNum(object, 'gateY');
     const width = Math.max(1, propNum(object, 'gateWidth', 1));
     for (let x = gx; x < gx + width; x += 1) {
       this.loaded.collision?.removeTileAt(x, gy);
-      for (const layer of Object.values(this.loaded.layers)) layer.removeTileAt(x, gy);
+      for (const [name, layer] of Object.entries(this.loaded.layers)) {
+        if (name === 'Ground') continue;
+        layer.removeTileAt(x, gy);
+      }
     }
   }
 

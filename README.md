@@ -9,7 +9,11 @@ npm install
 npm run dev
 ```
 
-Open the address printed by Vite. A typical playthrough takes about 12–20 minutes. Progress is saved automatically in the browser; after refreshing, choose **Continue**.
+Open the address printed by Vite. A typical playthrough takes about 12–20 minutes. Progress is saved
+automatically in the browser; after refreshing, choose **Continue**.
+
+The canvas fills the browser window at an integer camera zoom, so pixels stay exact at any size. The pause
+menu can switch to a fixed 400×225 view if you prefer an identical field of view on every machine.
 
 ## Controls
 
@@ -26,7 +30,12 @@ Open the address printed by Vite. A typical playthrough takes about 12–20 minu
 
 ## Adventure route
 
-Speak with Elder Hana and Master Ryo, then follow the south road into the woods. Defeat slimes, find supplies in chests and enter the shrine at the northeast edge. Find the shrine key, break the seal, defeat the Guardian, take the Ember and carry it back to Hana and the unlit village shrine.
+Speak with Elder Hana and Master Ryo, then follow the south road into the woods. Defeat slimes, find supplies
+in chests and enter the shrine at the northeast edge. Find the shrine key, break the seal, defeat the Guardian,
+take the Ember and carry it back to Hana and the unlit village shrine.
+
+Worth looking for on the way: a hidden grove behind the dojo, four cold braziers in the shrine that open a
+sealed vault, and a barred passage in the boss arena that drops straight back to the entrance.
 
 ## Quality checks
 
@@ -36,7 +45,15 @@ npm run build
 npm run test:e2e
 ```
 
-See [docs/TESTING.md](docs/TESTING.md) for the acceptance coverage and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the implementation map.
+Two further passes produce evidence rather than pass/fail results: `npm run test:perf` writes frame-time,
+viewport and transition measurements to `artifacts/measurements.md`, and `npm run test:shots` regenerates the
+screenshot baseline in `artifacts/playthrough/`.
+
+See [docs/TESTING.md](docs/TESTING.md) for the acceptance coverage,
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the implementation map,
+[docs/POLISH_AUDIT.md](docs/POLISH_AUDIT.md) for the before/after audit,
+[docs/SCREEN_SCALING.md](docs/SCREEN_SCALING.md) for the display system and
+[docs/PERFORMANCE.md](docs/PERFORMANCE.md) for measured frame times.
 
 ## Design, research and agent references
 

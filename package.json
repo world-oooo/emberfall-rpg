@@ -17,7 +17,9 @@
     "test:e2e": "playwright test",
     "maps:build": "node --experimental-transform-types tools/maps/build-maps.ts",
     "maps:validate": "node --experimental-transform-types tools/maps/validate-maps.ts",
-    "check": "npm run typecheck && npm run test && npm run maps:validate"
+    "check": "npm run typecheck && npm run test && npm run maps:validate",
+    "test:perf": "playwright test --config playwright.perf.config.ts",
+    "test:shots": "playwright test --config playwright.shots.config.ts"
   },
   "dependencies": {
     "idb-keyval": "~6.3.0",

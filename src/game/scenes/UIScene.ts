@@ -15,6 +15,9 @@ import type { WorldScene } from './WorldScene';
 
 type PanelKind = 'inventory' | 'quests' | 'pause' | 'shop';
 
+/** Top of the boss health bar. Clears the heart plate (ends at y 39) on the narrowest supported view. */
+const BOSS_HUD_Y = 44;
+
 const SHOP_ITEMS = [
   { itemId: 'rice_ball', quantity: 1, cost: 10 },
   { itemId: 'shuriken', quantity: 5, cost: 15 },
@@ -144,7 +147,7 @@ export class UIScene extends Phaser.Scene {
     this.questLabel.setPosition(this.w - pad - 3, pad + 11).setMaxWidth(150);
     this.positionHearts();
     this.refreshQuestPlate();
-    if (this.bossHud) this.bossHud.setPosition(Math.round(this.w / 2 - 108), 10);
+    if (this.bossHud) this.bossHud.setPosition(Math.round(this.w / 2 - 108), BOSS_HUD_Y);
   }
 
   private rebuildOpenSurfaces(): void {
@@ -186,7 +189,8 @@ export class UIScene extends Phaser.Scene {
 
   private refreshQuestPlate(): void {
     const width = Math.max(this.questTitle.width, this.questLabel.width) + 16;
-    const height = (this.questLabel.text ? 24 : 14) + 3;
+    // Objective lines wrap, so the plate is sized from what the labels actually measure.
+    const height = Math.ceil(this.questTitle.height + (this.questLabel.text ? this.questLabel.height + 3 : 0)) + 11;
     this.questPlate.resize(width, height).setPosition(this.w - width - 4, 4);
   }
 
@@ -244,9 +248,9 @@ export class UIScene extends Phaser.Scene {
 
   showToast(text: string): void {
     this.toast?.destroy(true);
-    const maxWidth = Math.min(this.w - 40, 300);
+    const maxWidth = Math.min(this.w - 48, 216);
     const label = this.add.bitmapText(0, 6, Tex.font, text, 8).setOrigin(0.5, 0).setTint(UiColor.text).setMaxWidth(maxWidth).setCenterAlign();
-    const width = Math.min(this.w - 24, Math.max(90, label.width + 24));
+    const width = Math.min(this.w - 24, Math.max(90, label.width + 26));
     const height = label.height + 13;
     const plate = new Plate(this, width, height, { radius: 4, alpha: 0.82, stroke: UiColor.textFaint, strokeAlpha: 0.4 });
     plate.setPosition(-width / 2, 0);
@@ -431,8 +435,9 @@ export class UIScene extends Phaser.Scene {
       this.bossName = this.add.bitmapText(width / 2, 4, Tex.font, '', 8).setOrigin(0.5, 0).setTint(UiColor.emberBright);
       this.bossTrail = this.add.rectangle(9, 19, width - 18, 10, 0xffd9a8).setOrigin(0, 0.5);
       this.bossFill = this.add.rectangle(9, 19, width - 18, 10, 0xc0433f).setOrigin(0, 0.5);
+      // Sits below the heart and stat plates: at 320 logical pixels a top-aligned bar overlapped them.
       this.bossHud = this.add
-        .container(Math.round(this.w / 2 - width / 2), 10, [frame, inner, this.bossName, this.bossTrail, this.bossFill])
+        .container(Math.round(this.w / 2 - width / 2), BOSS_HUD_Y, [frame, inner, this.bossName, this.bossTrail, this.bossFill])
         .setDepth(Depth.UI + 2)
         .setAlpha(0);
       this.bossRatio = 1;
@@ -451,7 +456,7 @@ export class UIScene extends Phaser.Scene {
     }
     this.bossRatio = ratio;
     this.bossHud.setVisible(true);
-    this.bossHud.setPosition(Math.round(this.w / 2 - width / 2), 10);
+    this.bossHud.setPosition(Math.round(this.w / 2 - width / 2), BOSS_HUD_Y);
     this.setQuestTrackerVisible(false);
   }
 

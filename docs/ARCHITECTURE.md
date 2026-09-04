@@ -10,7 +10,7 @@ Phaser 4.2.1 + TypeScript 5.9 (strict) + Vite 8. Single-player, offline, static 
 | **Persistent save state** | `SaveGame` object (versioned), stored in IndexedDB via `SaveSystem` | player HP/level/xp/position/map, inventory, equipment, quest states, world flags, opened chests, defeated bosses, playtime |
 | **Session state** | singleton session in `core/session.ts`, created on New Game / Continue | the live `SaveGame` being played |
 | **Scene state** | scene instances | sprites, bodies, tweens, timers — rebuilt from data on every map load |
-| **Settings** | `localStorage` | volumes, screen shake, integer scaling and hints |
+| **Settings** | `localStorage` | volumes, screen shake, display mode and hints |
 
 Persistent truth lives in the session save. Scene objects are rebuilt on every map load.
 
@@ -38,10 +38,10 @@ src/
     scenes/                    Boot, Preload, MainMenu, World, UI
     entities/
       player/                  Player.ts and PlayerCombat.ts
-      enemies/                 BaseEnemy.ts and enemy factory
+      enemies/                 BaseEnemy.ts, BossEnemy.ts (own FSM) and the enemy factory
       props/                   typed interactables, chests and map interactables
-    combat/                    Health.ts, Damage.ts (DamageInfo), Hitbox.ts, HitFeedback.ts (flash/hitstop/knockback/shake)
-    systems/                   interaction, quests, inventory, progression, audio, save, settings and map transitions
+    combat/                    Health.ts, Damage.ts (DamageInfo), Hitbox.ts, HitStop.ts, HitFeedback.ts
+    systems/                   display, interaction, quests, inventory, progression, audio, save, settings and map transitions
     world/                     map loader, registry and map types
     data/                      items, weapons, enemies, quests, dialogue, loot, maps and strings
     ui/                        reusable nine-slice panel widget
@@ -68,6 +68,28 @@ docs/                          this folder
 - **Save**: `SaveGame` has a version and is migrated on load. Serialized writes prevent older autosaves from overtaking transition or ending saves. IndexedDB persistence is requested after the first save.
 - **Debug/Test bridge**: `import.meta.env.DEV` gates `window.__GAME_TEST__` (read-only state getters + a few deterministic helpers) and the `?debug=1` overlay. Tree-shaken out of production.
 
+## Display
+
+`systems/DisplaySystem.ts` owns window → canvas → camera zoom. The canvas always fills the window
+(`Scale.RESIZE`) and the camera zoom is an integer chosen for that window, so pixels stay exact while the
+amount of visible world varies within a narrow band. Scenes read `Display.width` / `Display.height` and
+subscribe to `Display.onChange` rather than using fixed constants. See [SCREEN_SCALING.md](SCREEN_SCALING.md)
+for the chooser and the zoomed-camera scroll convention.
+
+## World state
+
+Anything the world should remember between visits is a flag on the save: `shrine.seal_open`,
+`shrine.braziers_lit`, `shrine.vault_open`, `shrine.shortcut_open`, `brazier.<id>`, `ending.relit_shrine`.
+`WorldScene.create` replays them — seals reopen their gates, lit braziers get their flame back, and a restored
+Ember relights the village shrine. NPC dialogue picks an `<npcId>_after` node when the ending flag is set.
+
+Gates are authored as a `Seal` interactable with `gateX/gateY/gateWidth`, optionally requiring an item
+(`requiredItem`) or another flag (`requiredFlag`). The map validator floods through those gate cells so a room
+behind a seal is still checked for reachability.
+
 ## Performance posture
 
-Tilemap layers use camera culling, maps contain at most ten regular enemies plus one boss, VFX are short-lived, and audio assets are decoded once. The compact 480×270 internal resolution keeps draw cost low while CSS scaling preserves crisp pixels.
+Tilemap layers use camera culling, maps contain at most ten regular enemies plus one boss, VFX are short-lived,
+and audio assets are decoded once. Frame time is measured, not assumed: see [PERFORMANCE.md](PERFORMANCE.md).
+Allocation and HUD-update optimisation are deliberately deferred while the game holds 60 fps with p99 under
+18 ms on hardware WebGL.

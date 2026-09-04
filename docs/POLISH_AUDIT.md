@@ -1,94 +1,119 @@
 # Emberfall — Polish Audit
 
-Measured on 2026-09-05 against commit `9e373ca` running from the local dev server, Chromium (Playwright),
-WebGL renderer. Scores: 1 = broken, 2 = weak, 3 = acceptable, 4 = good, 5 = shippable.
+Before scores were measured on 2026-09-05 against commit `9e373ca`; after scores against `bd20c41` plus the
+follow-up UI pass, both from the local dev server in Chromium with the WebGL renderer.
+Scale: 1 = broken, 2 = weak, 3 = acceptable, 4 = good, 5 = shippable.
 
-## Overall: 2.9 / 5
+## Overall: 2.9 → 4.1 / 5
 
-The game is feature-complete and technically healthy — 60 fps everywhere, no console errors, every system works.
-What holds it back is presentation and combat identity: the canvas uses less than half the screen on common
-laptops, the HUD is unstyled text painted over the world, the boss is a re-skinned regular enemy, and the shrine
-interior is visually broken.
+The game was always feature-complete and technically healthy. What held it back was presentation and combat
+identity: the canvas used less than half the screen on common laptops, the HUD was unstyled text painted over
+the world, the boss was a re-skinned regular enemy, and the shrine interior was visually broken.
+
+All of that is addressed. What keeps the score short of 5 is content volume rather than defects: three maps,
+one boss, and a single optional puzzle.
 
 ## Scores
 
-| Area | Score | Evidence |
-|---|---|---|
-| Visual Presentation | 3 | World tiles read well; interiors and HUD do not |
-| Screen Scaling | **1** | 49% window use at 1366×768, 45% at 1440×800 (measured) |
-| Pixel Sharpness | 4 | Integer zoom, no shimmer, no bleeding |
-| Camera | 3 | Smooth and pixel-snapped, but no look-ahead or arena framing |
-| Movement Feel | 4 | Responsive, frame-independent acceleration |
-| Attack Feel | **2** | Logic 300/300/440 ms vs 250 ms animation → character freezes after each swing |
-| Roll Feel | **2** | Logic 360 ms vs 214 ms animation → visible slide after the animation ends |
-| Hit Feedback | 3 | Flash + spark + shake + number present; hitstop implementation is fragile |
-| Enemy Readability | **2** | Telegraph is a tint change only; no separation, enemies stack |
-| Enemy Variety | 3 | Four archetypes exist but three behave similarly in practice |
-| Boss Design | **1** | One attack, chases constantly, 5 of 6 HP lost in 2.8 s while standing still |
-| HUD | **1** | Unstyled text over the world; unreadable on grass and shrine floor |
-| Dialogue UI | 2 | Grey interior does not match the wood frame; portrait box overlaps text |
-| Inventory UI | 2 | Text list, no icons, visible panel seam, most of the panel empty |
-| Quest UX | 3 | Objective tracker works; styling matches the weak HUD |
-| Main Menu | 3 | Clean, but tiny inside a large black frame |
-| Level Design | 3 | Village and woods have real structure |
-| Exploration | 3 | Secret grove and chests exist |
-| World Density | 2 | Woods trees sit on a visible 2-tile grid; village has large empty grass |
-| Secrets | 3 | One secret grove, three chests |
-| Audio | 3 | Music and SFX in place; hard cuts between areas; 16 MB of audio |
-| Loading | 4 | Village 0.7 s, woods 1.4 s, shrine 1.0 s |
-| Performance | **5** | 60 fps, p99 ≤ 17.9 ms in every scene, one 33 ms spike total |
-| Save UX | 4 | Autosave and Continue work |
-| Accessibility | 3 | Shake toggle, volume, hints; no rebinding |
-| Browser Robustness | 4 | No errors, resize handled, keys captured |
-| Overall Polish | 2 | Reads as a competent prototype, not a released indie game |
+| Area | Before | After | Evidence |
+|---|---|---|---|
+| Visual Presentation | 3 | 4 | Framed HUD, repaired interiors, lit shrine ending |
+| Screen Scaling | **1** | **5** | 100% window use at all eight tested viewports |
+| Pixel Sharpness | 4 | 5 | Integer zoom at every size, no shimmer, extruded tilesets |
+| Camera | 3 | 4 | Look-ahead from velocity, arena framing, pixel-snapped |
+| Movement Feel | 4 | 4 | Unchanged; it was already good |
+| Attack Feel | **2** | 4 | Logic matches the 240 ms animation, buffer, combo, cancel window |
+| Roll Feel | **2** | 4 | 300 ms logic against a 214 ms clip stretched to fit |
+| Hit Feedback | 3 | 4 | Owned hitstop controller instead of an inverted timeScale |
+| Enemy Readability | **2** | 3 | Shaped, coloured telegraphs per attack kind |
+| Enemy Variety | 3 | 3 | Four archetypes, unchanged |
+| Boss Design | **1** | 4 | Own controller, three attacks, two phases, arena sequence |
+| HUD | **1** | 4 | Rounded plates, hearts, level, coins, objective, boss bar |
+| Dialogue UI | 2 | 4 | Portrait frame, typewriter, box sized from its longest line |
+| Inventory UI | 2 | 4 | Five-column icon grid |
+| Quest UX | 3 | 4 | Tracker sized to its text, hidden during boss fights |
+| Main Menu | 3 | 4 | Fills the window, Continue slot, readable hints |
+| Level Design | 3 | 4 | Shrine rebuilt as carved rooms, village shrine is a real building |
+| Exploration | 3 | 4 | Hidden grove, keepers' vault, shortcut |
+| World Density | 2 | 4 | Forest jittered off the grid, village hill composed |
+| Secrets | 3 | 4 | One per map, each with its own reward |
+| Audio | 3 | 4 | Cross-fade between areas, 16 MB → 6.4 MB |
+| Loading | 4 | 4 | Cold 1.4–1.5 s, warm 0.4–0.8 s, cache warmed through doors |
+| Performance | **5** | **5** | 60 fps, p99 ≤ 17.8 ms in every scene including the boss |
+| Save UX | 4 | 4 | Autosave, Continue, world flags persist |
+| Accessibility | 3 | 4 | Shake, volume, hints, display mode; still no rebinding |
+| Browser Robustness | 4 | 5 | No console errors across the suite, resize handled live |
+| Overall Polish | 2 | 4 | Reads as a small finished game rather than a prototype |
+
+## What changed, in priority order
+
+### P0 — screen
+
+`DisplaySystem` replaced a fixed 480×270 canvas with `Scale.RESIZE` plus an integer camera zoom chosen for the
+window. Window use went from 45–56% on laptop sizes to 100% everywhere. Details and the full matrix are in
+[SCREEN_SCALING.md](SCREEN_SCALING.md).
+
+### P0 — game feel
+
+- Attack timing rebuilt as startup/active/recovery per combo step, with the animation stretched to the exact
+  length of its state. The hero no longer freezes on the last frame after each swing.
+- Roll cut to 300 ms with 235 ms of invulnerability and a real cooldown.
+- Hitstop moved into its own controller. The previous code set `physics.world.timeScale = 0.08`; that property
+  is inverted in Arcade Physics, so what was meant as a freeze ran physics roughly twelve times faster.
+- Camera look-ahead derived from velocity, and camera zones for framed rooms.
+
+### P0 — boss
+
+The Mask Keeper has its own state machine: swipe, charge and spirit burst, each with a shaped telegraph, plus
+a second phase at half health that changes the attack mix and chains combos. Entering the arena locks the
+camera, wakes the boss and swaps the music; its death gets hitstop, a flash and silence before the victory cue.
+
+### P1 — UI and world
+
+Every surface is laid out from `Display.width/height` and re-anchors on resize. The shrine was rebuilt as
+rooms carved from solid rock. The village shrine — the emotional centre of the story — was an invisible
+collision tile on bare dirt and is now an actual building, which the ending lights.
+
+### P2 — QA
+
+Fourteen end-to-end tests, sixteen unit tests, map validation, a scripted screenshot baseline and a scripted
+measurement pass. See [TESTING.md](TESTING.md).
 
 ## Measured data
 
-### Viewport matrix (before changes)
+### Viewport matrix
 
-| Viewport | Canvas CSS | Scale | Window used |
-|---|---|---|---|
-| 1280×720 | 960×540 | 2× | 56.3% |
-| 1366×768 | 960×540 | 2× | **49.4%** |
-| 1440×800 | 960×540 | 2× | **45.0%** |
-| 1440×900 | 1440×810 | 3× | 90.0% |
-| 1536×864 | 1440×810 | 3× | 87.9% |
-| 1600×900 | 1440×810 | 3× | 81.0% |
-| 1920×1080 | 1920×1080 | 4× | 100% |
-| 2560×1440 | 2400×1350 | 5× | 87.9% |
+| Viewport | Before: canvas / used | After: canvas / zoom / used |
+|---|---|---|
+| 1280×720 | 960×540 / 56.3% | 1280×720 / 4× / 100% |
+| 1366×768 | 960×540 / **49.4%** | 1366×768 / 4× / 100% |
+| 1440×800 | 960×540 / **45.0%** | 1440×800 / 4× / 100% |
+| 1440×900 | 1440×810 / 90.0% | 1440×900 / 4× / 100% |
+| 1536×864 | 1440×810 / 87.9% | 1536×864 / 4× / 100% |
+| 1600×900 | 1440×810 / 81.0% | 1600×900 / 5× / 100% |
+| 1920×1080 | 1920×1080 / 100% | 1920×1080 / 5× / 100% |
+| 2560×1440 | 2400×1350 / 87.9% | 2560×1440 / 7× / 100% |
 
-Cause: a 480×270 canvas needs 810 px of height for 3× zoom. Every window shorter than 810 px falls back to 2×,
-which is 960×540 — a quarter of a 1080p screen. The two most common laptop sizes are the worst cases.
+### Performance
 
-### Performance (1920×1080, WebGL)
+Locked 60 fps on hardware WebGL in every scene, boss fight included. Full tables, the software-rasteriser
+comparison and the transition benchmark are in [PERFORMANCE.md](PERFORMANCE.md).
 
-| Scene | Avg | p95 | p99 | Max | Frames > 33 ms |
-|---|---|---|---|---|---|
-| Menu | 16.67 ms | 17.1 | 17.4 | 19.3 | 0 |
-| Village idle | 16.66 | 17.2 | 17.3 | 17.3 | 0 |
-| Village walking | 16.67 | 17.1 | 17.2 | 17.5 | 0 |
-| Woods idle | 16.67 | 17.2 | 17.4 | 17.5 | 0 |
-| Woods combat | 16.67 | 17.3 | 17.9 | 18.0 | 0 |
-| Shrine idle | 16.67 | 17.2 | 17.2 | 17.3 | 0 |
-| Boss fight | 16.67 | 17.2 | 17.6 | 33.2 | 1 |
+## Defects found by the audit and fixed
 
-Heap 55.6 MB. Map loads: village 697 ms, woods 1359 ms, shrine 995 ms.
+Recorded because each was invisible from reading the code alone:
 
-Performance is not a problem. Optimisation work is deliberately deprioritised.
-
-## Biggest problems, in order
-
-1. **Canvas uses half the window on laptops.** The single most damaging first impression.
-2. **Boss is a regular enemy with more HP.** It chases without pause and drained 5 of 6 player hearts in
-   2.8 seconds of standing contact. No telegraph, no phases, no arena, no punish window.
-3. **HUD is developer text.** Level, XP, coins and the quest tracker are drawn straight onto the world.
-4. **Attack and roll logic outlast their animations.** The hero visibly freezes after each swing and slides
-   after each roll.
-5. **Shrine interior is visually broken.** One flat floor tile across 30×40, furniture tiles used as walls,
-   scattered black gaps that read as missing tiles.
-6. **Enemy telegraphs are a tint change**, and enemies have no separation so they overlap into one blob.
-7. **Menus are text lists** without icons or structure.
-8. **Woods forest is on a visible 2-tile grid.**
+1. Hitstop ran physics ~12× faster instead of freezing it (inverted `timeScale`).
+2. The sealed stair was a `shrine → shrine` teleport whose destination sat on its own trigger, so the arena
+   could softlock the player.
+3. `AudioSystem` tweened a `Sound` a scene restart had destroyed mid-fade, throwing on transitions.
+4. The boss camera zone was smaller than the view, so the arena showed black void outside the map.
+5. Neighbour prefetch queued into the scene loader and raced with transitions: "Texture key already in use".
+6. Wrapped dialogue lines were drawn on top of the choice list.
+7. Two shrine quest triggers named objectives their quest does not define, so they were dead.
+8. Opening a seal stripped the tile from every layer including Ground, punching a black hole in the floor.
+9. The quest tracker's text overflowed its rounded plate and its plate ignored wrapped objective lines.
+10. The boss health bar overlapped the heart plate at 320 logical pixels wide.
 
 ## Comparison references
 
@@ -100,18 +125,9 @@ Performance is not a problem. Optimisation work is deliberately deprioritised.
 - **Death's Door** — bosses telegraph slowly and leave a clear punish window after each attack.
 - **Minishoot' Adventures** — the camera shows a consistent amount of world at every window size.
 
-## Direction
+## What is still weak
 
-Keep the architecture. Change presentation and combat identity.
-
-- Display: fill the window at an integer camera zoom instead of letterboxing a fixed canvas.
-- Combat: align logic to animation, add cancel windows, make hitstop a single owned controller.
-- Boss: give the Mask Keeper its own controller, three attacks, two phases and an arena sequence.
-- UI: framed HUD, icon inventory, structured panels, all laid out responsively.
-- World: repair the shrine, break the forest grid, add reasons to look around.
-
-## Implementation order
-
-**P0** — display system, HUD frame, attack/roll timing, hitstop controller, camera look-ahead, boss controller.
-**P1** — enemy telegraphs and separation, dialogue/inventory/quest/shop/menu redesign, shrine repair, woods density.
-**P2** — audio transitions, region prefetch, allocation cleanup, regression tests, full playthrough.
+- **Enemy variety.** Three of the four regular archetypes still play as "walk at the player".
+- **Content volume.** Three maps and one boss. That is the deliberate scope, but it caps the ceiling.
+- **No input rebinding.** Keyboard layouts are generous but fixed.
+- **One puzzle.** The brazier vault is the only non-combat problem in the game.

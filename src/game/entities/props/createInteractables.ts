@@ -26,7 +26,14 @@ export function createMapInteractables(
     const kind = KIND_BY_TILED_TYPE[o.type];
     if (!kind) continue;
     const id = propStr(o, 'interactionId', o.name);
-    const data = kind === 'brazier' ? { ...objectData(o), hideWhenFlag: `brazier.${id}` } : objectData(o);
+    // One-shot props stop offering a prompt once their flag is set: a lit brazier, an opened seal.
+    const base = objectData(o);
+    const data =
+      kind === 'brazier'
+        ? { ...base, hideWhenFlag: `brazier.${id}` }
+        : kind === 'seal' && typeof base.openFlag === 'string'
+          ? { ...base, hideWhenFlag: base.openFlag }
+          : base;
     targets.push(new MapInteractable(scene, { id, kind, x: pointX(o), y: pointY(o), data }, callbacks));
   }
   for (const o of loaded.objects.Chests ?? []) {

@@ -45,12 +45,14 @@ declare global {
       getInventory: () => unknown;
       getQuests: () => unknown;
       getSettings: () => { masterVolume: number; musicVolume: number; sfxVolume: number; screenShake: boolean; displayMode: 'fill' | 'fixed'; showHints: boolean };
+      getDisplay: () => { zoom: number; width: number; height: number; canvasWidth: number; canvasHeight: number; mode: 'fill' | 'fixed' };
       getEnemies: () => unknown[];
       getActiveInteraction: () => string | null;
       startScene: (key: string, data?: object) => void;
       teleport: (x: number, y: number) => void;
       damageEnemy: (spawnId: string, amount?: number) => boolean;
       damagePlayer: (amount?: number) => boolean;
+      healPlayer: (amount?: number) => boolean;
       saveNow: () => Promise<void>;
     };
   }

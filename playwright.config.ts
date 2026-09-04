@@ -2,6 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // The measurement pass is slow and asserts nothing; run it on demand with `npm run test:perf`.
+  testIgnore: ['**/performance.spec.ts', '**/screenshots.spec.ts'],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 1,
