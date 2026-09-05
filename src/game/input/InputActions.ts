@@ -91,8 +91,12 @@ const KEYCODE_TO_CODE: ReadonlyMap<number, string> = (() => {
 /** Keys Phaser must swallow so the browser never scrolls or tabs away. */
 export const CAPTURED_KEYS: number[] = capturedKeyCodesFromBindings(DEFAULT_BINDINGS);
 
-/** Presses waiting to be consumed. A player mashing faster than this has stopped meaning it. */
-const MAX_QUEUED_PRESSES = 6;
+/**
+ * Safety bound on the press queue. Each entry is a discrete keydown (auto-repeat is already filtered), so this
+ * only guards against a pathological flood; it is set well above any real burst — including a test walking a
+ * menu with several rapid taps while a slow, GPU-less runner drains one press per frame.
+ */
+const MAX_QUEUED_PRESSES = 64;
 
 /**
  * Per-scene action mapper: keyboard + gamepad (pad1) → named actions and a movement axis.
