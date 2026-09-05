@@ -58,6 +58,12 @@ Played through the captures screen by screen as a player would, and fixed what r
   BACK label comes from the real Pause binding rather than a hard-coded "ESC".
 - **A keydown without a `code`** (some IMEs, virtual keyboards, remote desktops) was invisible to the input
   layer. It now falls back to `key`, then `keyCode`.
+- **The quest log and the shop drew rows at a fixed pitch**, so an objective or description that wrapped to a
+  second line was overwritten by the next row ("D0/1eat 4 forest slimes", "Hits from afar." over "Life
+  Potion"), and "BOTAN STALL" ran into its header hint. Rows now advance by what they draw, objective
+  counters sit right-aligned on the first line, panel hints are just "Escape BACK" with an explicit "E BUY"
+  beside the shop's coin count, and both panels are tall enough for their content at 720p. These two screens,
+  plus the game-over card, were never in the capture baseline before; they are now.
 
 The in-app browser pane used for the first attempt reports `document.hidden`, so Chromium throttles it and
 Phaser pauses; that environment is unusable for judging feel, and the pass was done from Playwright captures.

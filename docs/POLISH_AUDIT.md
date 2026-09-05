@@ -145,6 +145,8 @@ Found by playing the release candidate screen by screen:
     the top of the view.
 18. Inventory, shop and quest-log headers listed bare key names where the release menu used key-plus-verb.
 19. A keydown without a `code` (IMEs, virtual keyboards, remote desktops) never reached the input layer.
+20. Quest-log objectives and shop descriptions that wrapped were overwritten by the next row; "BOTAN STALL"
+    collided with its header hint. Neither panel, nor the game-over card, was in the capture baseline.
 
 ## Comparison references
 

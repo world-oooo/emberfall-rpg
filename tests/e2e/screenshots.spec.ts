@@ -59,6 +59,15 @@ test('captures the playthrough baseline @shots', async ({ page, errorWatcher }) 
   await page.keyboard.press('KeyI');
   await shot(page, 'inventory');
   await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  // Quest log and shop at 720p, the tightest supported height for these panels.
+  await page.keyboard.press('KeyQ');
+  await shot(page, 'quest-log', 500);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  await talkTo(page, 104, 336);
+  await shot(page, 'shop', 500);
+  await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
   await page.keyboard.press('Escape');
   await shot(page, 'pause-menu');

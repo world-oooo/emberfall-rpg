@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { test } from './fixtures';
 import type { Page } from './fixtures';
-import { openGame, startNewGame, waitForMainMenu } from './helpers/game';
+import { openGame, startNewGame, talkTo, waitForMainMenu } from './helpers/game';
 
 /**
  * Screenshots of the release-candidate surfaces at 1366x768, the narrowest supported laptop size. Runs with
@@ -75,6 +75,18 @@ test('captures the release-candidate surfaces at 1366x768 @shots', async ({ page
   await shot(page, 'save-data');
   await tap(page, 'Escape');
   await tap(page, 'Escape');
+  // Quest log, Botan's shop and the game-over card: the three in-world surfaces the playthrough never shows.
+  await tap(page, 'KeyQ', 500);
+  await shot(page, 'quest-log');
+  await tap(page, 'Escape', 400);
+  await talkTo(page, 104, 336);
+  await shot(page, 'shop-dialogue', 500);
+  await tap(page, 'Enter', 600);
+  await shot(page, 'shop');
+  await tap(page, 'Escape', 500);
+  await page.evaluate(() => window.__GAME_TEST__?.damagePlayer());
+  await shot(page, 'game-over', 1600);
+  await tap(page, 'Enter', 900);
 
   // With a save in the slot the title shows Continue metadata and warns before a New Game.
   await page.evaluate(() => window.__GAME_TEST__?.saveNow());

@@ -639,7 +639,7 @@ export class UIScene extends Phaser.Scene {
     const save = getSession().save;
     const width = Math.min(this.w - 32, 326);
     const height = Math.min(this.h - 28, 172);
-    const { container, items, x, contentTop } = this.beginModal('INVENTORY', width, height, this.modalHint(['up', 'down', 'interact', 'pause']));
+    const { container, items, x, contentTop } = this.beginModal('INVENTORY', width, height, this.modalHint(['pause']));
 
     const cols = 5;
     const cell = 23;
@@ -692,24 +692,33 @@ export class UIScene extends Phaser.Scene {
   private renderShop(): void {
     const save = getSession().save;
     const width = Math.min(this.w - 32, 304);
-    const height = Math.min(this.h - 28, 178);
-    const { container, items, x, contentTop } = this.beginModal('BOTAN STALL', width, height, this.modalHint(['up', 'down', 'interact', 'pause']));
+    // Tall enough for four rows with one wrapped description plus the coin row at 720p.
+    const height = Math.min(this.h - 12, 186);
+    const { container, items, x, contentTop } = this.beginModal('BOTAN STALL', width, height, this.modalHint(['pause']));
+    // Rows advance by what they actually draw: a description that wraps to two lines used to spill onto the
+    // next item at a fixed pitch.
+    let rowY = contentTop;
     SHOP_ITEMS.forEach((offer, index) => {
       const item = getItem(offer.itemId);
-      const rowY = contentTop + index * 25;
       const selected = index === this.listIndex;
-      if (selected) items.push(this.add.rectangle(x + 11, rowY - 3, width - 22, 23, 0x2f2a3a).setOrigin(0, 0));
-      items.push(this.add.image(x + 24, rowY + 8, Tex.inventoryCell).setOrigin(0.5).setDisplaySize(18, 18).setAlpha(0.85));
-      items.push(this.add.image(x + 24, rowY + 8, itemTexture(item.id)).setOrigin(0.5));
+      const row: Phaser.GameObjects.GameObject[] = [];
+      row.push(this.add.image(x + 24, rowY + 8, Tex.inventoryCell).setOrigin(0.5).setDisplaySize(18, 18).setAlpha(0.85));
+      row.push(this.add.image(x + 24, rowY + 8, itemTexture(item.id)).setOrigin(0.5));
       const label = `${item.name}${offer.quantity > 1 ? ` x${offer.quantity}` : ''}`;
-      items.push(this.add.bitmapText(x + 38, rowY, Tex.font, label, 8).setTint(selected ? UiColor.emberBright : UiColor.text));
+      row.push(this.add.bitmapText(x + 38, rowY, Tex.font, label, 8).setTint(selected ? UiColor.emberBright : UiColor.text));
       const affordable = save.player.coins >= offer.cost;
-      items.push(this.add.bitmapText(x + width - 14, rowY, Tex.font, `${offer.cost}`, 8).setOrigin(1, 0).setTint(affordable ? UiColor.coin : UiColor.danger));
-      items.push(this.add.bitmapText(x + 38, rowY + 10, Tex.font, item.description, 8).setTint(UiColor.textFaint).setMaxWidth(width - 66));
+      row.push(this.add.bitmapText(x + width - 14, rowY, Tex.font, `${offer.cost}`, 8).setOrigin(1, 0).setTint(affordable ? UiColor.coin : UiColor.danger));
+      const description = this.add.bitmapText(x + 38, rowY + 10, Tex.font, item.description, 8).setTint(UiColor.textFaint).setMaxWidth(width - 66);
+      row.push(description);
+      const rowHeight = Math.max(25, 10 + description.height + 5);
+      if (selected) items.push(this.add.rectangle(x + 11, rowY - 3, width - 22, rowHeight - 2, 0x2f2a3a).setOrigin(0, 0));
+      items.push(...row);
+      rowY += rowHeight;
     });
-    const coinY = contentTop + SHOP_ITEMS.length * 25 + 6;
+    const coinY = rowY + 6;
     items.push(this.add.image(x + 15, coinY, itemTexture('coin')).setOrigin(0, 0.5));
     items.push(this.add.bitmapText(x + 27, coinY - 4, Tex.font, `${save.player.coins}`, 8).setTint(UiColor.coin));
+    items.push(this.add.bitmapText(x + width - 14, coinY - 4, Tex.font, `${SettingsStore.keyLabel('interact')} BUY`, 8).setOrigin(1, 0).setTint(UiColor.textFaint));
     container.add(items);
     this.panel = container;
   }
@@ -717,7 +726,8 @@ export class UIScene extends Phaser.Scene {
   private renderQuests(): void {
     const save = getSession().save;
     const width = Math.min(this.w - 32, 304);
-    const height = Math.min(this.h - 28, 174);
+    // Tall enough for both quests with their wrapped objectives at 720p.
+    const height = Math.min(this.h - 12, 186);
     const { container, items, x, contentTop } = this.beginModal('QUEST LOG', width, height, this.modalHint(['pause']));
     let y = contentTop;
     let any = false;
@@ -733,13 +743,20 @@ export class UIScene extends Phaser.Scene {
         const amount = progress.objectives[objective.id] ?? 0;
         const done = amount >= objective.count;
         items.push(this.add.rectangle(x + 21, y + 4, 4, 4, done ? 0xa8d08a : 0x7f7568).setOrigin(0.5));
+        // Counter on the first line at the right; the label wraps beside it and the row advances by what it
+        // drew, so a two-line objective never lands on the next one.
+        const label = this.add
+          .bitmapText(x + 30, y, Tex.font, objective.label, 8)
+          .setTint(done ? UiColor.textFaint : UiColor.text)
+          .setMaxWidth(width - 78);
+        items.push(label);
         items.push(
           this.add
-            .bitmapText(x + 30, y, Tex.font, `${objective.label}   ${Math.min(amount, objective.count)}/${objective.count}`, 8)
-            .setTint(done ? UiColor.textFaint : UiColor.text)
-            .setMaxWidth(width - 50),
+            .bitmapText(x + width - 14, y, Tex.font, `${Math.min(amount, objective.count)}/${objective.count}`, 8)
+            .setOrigin(1, 0)
+            .setTint(done ? UiColor.textFaint : UiColor.textDim),
         );
-        y += 11;
+        y += Math.max(11, label.height + 3);
       }
       y += 7;
     }
