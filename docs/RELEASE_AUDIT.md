@@ -15,7 +15,7 @@ Environment: Windows 11, Node 24.15.0, npm 11.12.1 (engines >= 22.12.0; CI runs 
 | Unit | Pass, 35 tests in 7 files |
 | Map validation | Pass, village / woods / shrine, reachability through seal gates |
 | Build | Pass, 153 kB game JS (46.7 kB gzip), 1.37 MB Phaser |
-| Chromium E2E | Pass, 22 tests on the dev server (15 game, 7 release surface) |
+| Chromium E2E | Pass, 22 tests on the dev server (15 game, 7 release surface), green under a 6x CPU throttle |
 | Production preview | Pass: `vite preview` of the build, canvas drawn, `window.__GAME_TEST__` absent, no failed requests, no console errors, walk village → woods, reload, Continue, walk back |
 | WebKit | Completion run at 1366×768, 1440×900 and 1920×1080 (see Browser) |
 | Firefox | Completion run at 1366×768, 1440×900 and 1920×1080 (see Browser) |
@@ -68,7 +68,14 @@ Matrix results are recorded in the Verification record below.
 
 ## Release Blockers
 
-P0: none open. Fixed this pass: every door softlocked in Firefox, because each save awaited
+P0: none open. Fixed after the first CI run went red on the clean Ubuntu checkout: on a GPU-less runner the
+game renders two or three frames per second, and Phaser's ANY_KEY_DOWN re-emits one physical keypress once per
+Key registered to that code — binding both `down` and `menuDown` to ArrowDown made a single tap walk a menu
+cursor two rows, so a reload's Down+Enter landed on Options instead of Continue and no world loaded. Edges now
+come from the DOM keydown (delivered exactly once, `event.repeat` filtered) rather than Phaser's event, and
+presses queue one-per-frame so nothing collapses when a frame lasts 300 ms. Verified locally under a 6x CPU
+throttle (`E2E_CPU_THROTTLE=6`), 0/10 on the reload→Continue repro and the whole suite green. Also fixed: every
+door softlocked in Firefox, because each save awaited
 `navigator.storage.persist()`, which Firefox answers with a permission prompt that never settles headlessly
 and blocks until answered otherwise, and the door transition waits on the save queue (found by the
 three-engine matrix, reproduced by walking into a door in Firefox, fixed by requesting persistence once and
@@ -88,6 +95,7 @@ one-time rebuild after the save slot loads and were not re-measured on hardware.
 
 Recorded from the runs on this date.
 
+- First CI run (clean Ubuntu, no GPU): 5 E2E failures from the frame-rate/input bug above; fixed and re-verified under a local 6x CPU throttle.
 - Default suite: 22/22 on one worker (an earlier two-worker run dropped a menu press under CPU load; the
   tests now press until the browser event arrives and the config pins one worker).
 - Production smoke: pass, 17 s.

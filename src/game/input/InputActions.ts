@@ -31,7 +31,6 @@ type KeyName = Action | Dir;
 
 const K = Phaser.Input.Keyboard.KeyCodes;
 
-
 const CODE_TO_KEYCODE: Readonly<Record<string, number>> = {
   ArrowUp: K.UP,
   ArrowDown: K.DOWN,
@@ -82,12 +81,27 @@ const CODE_TO_KEYCODE: Readonly<Record<string, number>> = {
   Digit9: K.NINE,
 };
 
+/** Reverse of CODE_TO_KEYCODE: a Phaser keycode back to the first DOM code that maps to it. */
+const KEYCODE_TO_CODE: ReadonlyMap<number, string> = (() => {
+  const map = new Map<number, string>();
+  for (const [code, keyCode] of Object.entries(CODE_TO_KEYCODE)) if (!map.has(keyCode)) map.set(keyCode, code);
+  return map;
+})();
+
 /** Keys Phaser must swallow so the browser never scrolls or tabs away. */
 export const CAPTURED_KEYS: number[] = capturedKeyCodesFromBindings(DEFAULT_BINDINGS);
+
+/** Presses waiting to be consumed. A player mashing faster than this has stopped meaning it. */
+const MAX_QUEUED_PRESSES = 6;
 
 /**
  * Per-scene action mapper: keyboard + gamepad (pad1) → named actions and a movement axis.
  * Call update() once at the top of the scene's update; then read `axis`, `held()`, `pressed()`.
+ *
+ * Every physical key press is queued from its DOM event and consumed one per frame, in the order the keys went
+ * down. Reading the keys' state once per frame instead would collapse two presses that arrive inside one frame
+ * into a single press, which is exactly what happens on a slow machine, or in a test runner without a GPU,
+ * where a frame can last a third of a second. Held keys are still read live, so movement never lags.
  */
 export class InputActions {
   readonly axis = new Phaser.Math.Vector2();
@@ -95,16 +109,34 @@ export class InputActions {
   readonly lastDir = new Phaser.Math.Vector2(0, 1);
 
   private readonly keys: Record<Action | Dir, Phaser.Input.Keyboard.Key[]>;
-  private readonly keyDownHandlers = new Map<Phaser.Input.Keyboard.Key, Array<() => void>>();
+  /** Which action/direction names each keyboard code maps to, e.g. ArrowDown -> ['down','menuDown']. */
+  private namesByCode: Map<string, KeyName[]> = new Map();
   private readonly heldNow = new Set<Action>();
-  private readonly heldPrev = new Set<Action>();
+  private readonly padHeld = new Set<Action>();
+  private readonly padHeldPrev = new Set<Action>();
+  /** Actions that count as freshly pressed this frame. */
+  private readonly edges = new Set<Action>();
   private readonly buffered = new Map<Action, number>();
+  /** One entry per physical press: every name bound to that key, so pause+cancel on Escape stay one press. */
+  private readonly pressQueue: KeyName[][] = [];
   private padDir: Record<Dir, boolean> = { up: false, down: false, left: false, right: false };
   private enabled = true;
   private readonly unsubscribeBindings: () => void;
   private readonly onWindowBlur = (): void => this.clearTransientInput();
-  /** key names that received a DOM keydown since the last update (catches presses shorter than a frame) */
-  private readonly latched = new Set<Action | Dir>();
+  /**
+   * Edges are taken from the DOM keydown, not from Phaser's ANY_KEY_DOWN. In this Phaser build the latter
+   * re-emits a single physical press once per Key registered to that code, so binding both `down` and
+   * `menuDown` to ArrowDown made one tap walk a menu cursor two rows. The browser fires keydown exactly once.
+   */
+  private readonly onKeyDown = (event: KeyboardEvent): void => {
+    if (!this.enabled || event.repeat) return;
+    // Both shift keys share one Phaser keycode, so namesByCode only holds the left one.
+    const code = event.code === 'ShiftRight' ? 'ShiftLeft' : event.code;
+    const names = this.namesByCode.get(code);
+    if (!names) return;
+    this.bindingStore.setActiveDevice('keyboard');
+    if (this.pressQueue.length < MAX_QUEUED_PRESSES) this.pressQueue.push(names);
+  };
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -116,6 +148,7 @@ export class InputActions {
     this.rebuildKeys();
     this.unsubscribeBindings = this.bindingStore.onChange(() => this.rebuildKeys());
     window.addEventListener('blur', this.onWindowBlur);
+    window.addEventListener('keydown', this.onKeyDown, true);
   }
 
   /** Disable while a modal (dialogue/menu) owns input; movement axis becomes zero and nothing is "pressed". */
@@ -153,14 +186,19 @@ export class InputActions {
   }
 
   update(time: number): void {
-    this.heldPrev.clear();
-    for (const a of this.heldNow) this.heldPrev.add(a);
     this.heldNow.clear();
+    this.edges.clear();
+    this.padHeldPrev.clear();
+    for (const a of this.padHeld) this.padHeldPrev.add(a);
+    this.padHeld.clear();
     if (!this.enabled) {
       this.axis.set(0, 0);
-      this.latched.clear();
+      this.pressQueue.length = 0;
       return;
     }
+
+    // The oldest physical press becomes this frame's edges; the rest wait their turn.
+    const consumed = new Set<KeyName>(this.pressQueue.shift() ?? []);
 
     const pad = this.scene.input.gamepad?.total ? this.scene.input.gamepad.pad1 : undefined;
     this.padDir = { up: false, down: false, left: false, right: false };
@@ -177,22 +215,23 @@ export class InputActions {
       if (pad.down) ay = 1;
       if (pad.left) ax = -1;
       if (pad.right) ax = 1;
-      if (pad.A) this.heldNow.add('attack').add('confirm');
-      if (pad.B) this.heldNow.add('roll').add('cancel');
-      if (pad.X) this.heldNow.add('interact').add('confirm');
-      if (pad.Y) this.heldNow.add('throw');
-      if (pad.isButtonDown(9)) this.heldNow.add('pause');
-      if (pad.isButtonDown(8)) this.heldNow.add('inventory');
-      if (pad.L1 > 0.5) this.heldNow.add('quests');
-      if (this.padDir.up) this.heldNow.add('menuUp');
-      if (this.padDir.down) this.heldNow.add('menuDown');
-      if (this.padDir.left) this.heldNow.add('menuLeft');
-      if (this.padDir.right) this.heldNow.add('menuRight');
-      if (ax !== 0 || ay !== 0 || this.heldNow.size > 0) this.bindingStore.setActiveDevice('gamepad');
+      if (pad.A) this.padHeld.add('attack').add('confirm');
+      if (pad.B) this.padHeld.add('roll').add('cancel');
+      if (pad.X) this.padHeld.add('interact').add('confirm');
+      if (pad.Y) this.padHeld.add('throw');
+      if (pad.isButtonDown(9)) this.padHeld.add('pause');
+      if (pad.isButtonDown(8)) this.padHeld.add('inventory');
+      if (pad.L1 > 0.5) this.padHeld.add('quests');
+      if (this.padDir.up) this.padHeld.add('menuUp');
+      if (this.padDir.down) this.padHeld.add('menuDown');
+      if (this.padDir.left) this.padHeld.add('menuLeft');
+      if (this.padDir.right) this.padHeld.add('menuRight');
+      if (ax !== 0 || ay !== 0 || this.padHeld.size > 0) this.bindingStore.setActiveDevice('gamepad');
     }
 
-    const kx = (this.anyDown('right') ? 1 : 0) - (this.anyDown('left') ? 1 : 0);
-    const ky = (this.anyDown('down') ? 1 : 0) - (this.anyDown('up') ? 1 : 0);
+    const keyDown = (name: KeyName): boolean => consumed.has(name) || this.anyKeyDown(name);
+    const kx = (keyDown('right') ? 1 : 0) - (keyDown('left') ? 1 : 0);
+    const ky = (keyDown('down') ? 1 : 0) - (keyDown('up') ? 1 : 0);
     if (kx !== 0 || ky !== 0) {
       ax = kx;
       ay = ky;
@@ -202,21 +241,24 @@ export class InputActions {
     if (ax !== 0 || ay !== 0) this.lastDir.set(ax, ay).normalize();
 
     for (const a of ACTIONS) {
-      if (this.anyDown(a) || this.latched.has(a)) this.heldNow.add(a);
+      if (keyDown(a)) this.heldNow.add(a);
+      if (consumed.has(a)) this.edges.add(a);
     }
-    this.latched.clear();
-    for (const a of this.heldNow) {
-      if (!this.heldPrev.has(a)) this.buffered.set(a, time);
+    // Gamepad buttons have no key events; their edge is the frame they go down.
+    for (const a of this.padHeld) {
+      this.heldNow.add(a);
+      if (!this.padHeldPrev.has(a)) this.edges.add(a);
     }
+    for (const a of this.edges) this.buffered.set(a, time);
   }
 
   held(action: Action): boolean {
     return this.heldNow.has(action);
   }
 
-  /** True on the first frame the action is held. */
+  /** True on the frame a press is consumed, once per physical press. */
   pressed(action: Action): boolean {
-    return this.heldNow.has(action) && !this.heldPrev.has(action);
+    return this.edges.has(action);
   }
 
   /** True if the action was pressed within the last `windowMs`; consuming clears it (input buffering for combat). */
@@ -242,18 +284,23 @@ export class InputActions {
     const bindings = this.bindingStore.getBindings();
     const keyCodes = keyCodeBindings(bindings);
     kb.addCapture(capturedKeyCodesFromBindings(bindings));
+
+    // Phaser Key objects are used only for live held-state (movement); edges come from the DOM event below.
     for (const name of KEY_NAMES) {
       const codes = keyCodes[name] ?? [];
       this.keys[name] = codes.map((code) => kb.addKey(code, false));
-      for (const key of this.keys[name]) {
-        const handler = (): void => {
-          this.bindingStore.setActiveDevice('keyboard');
-          this.latched.add(name);
-        };
-        key.on(Phaser.Input.Keyboard.Events.DOWN, handler);
-        const handlers = this.keyDownHandlers.get(key) ?? [];
-        handlers.push(handler);
-        this.keyDownHandlers.set(key, handlers);
+    }
+
+    // Map each DOM code (e.g. 'ArrowDown') to the names it drives, so one keydown queues one press for all of
+    // them together — pause and cancel on the same Escape stay a single press.
+    this.namesByCode = new Map();
+    for (const name of KEY_NAMES) {
+      for (const keyCode of keyCodes[name] ?? []) {
+        const code = KEYCODE_TO_CODE.get(keyCode);
+        if (!code) continue;
+        const names = this.namesByCode.get(code) ?? [];
+        names.push(name);
+        this.namesByCode.set(code, names);
       }
     }
     this.clearTransientInput();
@@ -263,30 +310,30 @@ export class InputActions {
     const kb = this.scene.input.keyboard;
     if (!kb) return;
     for (const list of Object.values(this.keys)) {
-      for (const key of list) {
-        for (const handler of this.keyDownHandlers.get(key) ?? []) key.off(Phaser.Input.Keyboard.Events.DOWN, handler);
-        kb.removeKey(key, false, false);
-        this.keyDownHandlers.delete(key);
-      }
+      for (const key of list) kb.removeKey(key, false, false);
     }
+    for (const name of KEY_NAMES) this.keys[name] = [];
   }
 
   private clearTransientInput(): void {
     this.axis.set(0, 0);
     this.heldNow.clear();
-    this.heldPrev.clear();
+    this.padHeld.clear();
+    this.padHeldPrev.clear();
+    this.edges.clear();
     this.buffered.clear();
-    this.latched.clear();
+    this.pressQueue.length = 0;
   }
 
-  private anyDown(name: Action | Dir): boolean {
-    const list = this.keys[name];
+  private anyKeyDown(name: KeyName): boolean {
+    const list = this.keys[name] ?? [];
     for (const k of list) if (k.isDown) return true;
-    return this.latched.has(name);
+    return false;
   }
 
   destroy(): void {
     window.removeEventListener('blur', this.onWindowBlur);
+    window.removeEventListener('keydown', this.onKeyDown, true);
     this.unsubscribeBindings();
     this.releaseKeys();
     this.clearTransientInput();

@@ -56,11 +56,14 @@ test('moves the player when holding a movement key', async ({ page, errorWatcher
   await startNewGame(page);
   const before = await getPlayerState(page);
 
+  // Polled while the key is held: a fixed hold covers less ground on a machine that renders a few frames a
+  // second, because Phaser clamps each frame's delta to 200 ms.
   await page.keyboard.down('KeyD');
-  await page.waitForTimeout(500);
-  await page.keyboard.up('KeyD');
-
-  await expect.poll(async () => (await getPlayerState(page)).x).toBeGreaterThan(before.x + 20);
+  try {
+    await expect.poll(async () => (await getPlayerState(page)).x).toBeGreaterThan(before.x + 20);
+  } finally {
+    await page.keyboard.up('KeyD');
+  }
   await expect.poll(async () => (await getPlayerState(page)).facing).toBe('right');
 });
 
@@ -224,9 +227,11 @@ test('uses an inventory item and persists pause-menu settings', async ({ page, e
   await page.waitForTimeout(350);
   const before = await getPlayerState(page);
   await page.keyboard.down('KeyD');
-  await page.waitForTimeout(400);
-  await page.keyboard.up('KeyD');
-  await expect.poll(async () => (await getPlayerState(page)).x).toBeGreaterThan(before.x + 10);
+  try {
+    await expect.poll(async () => (await getPlayerState(page)).x).toBeGreaterThan(before.x + 10);
+  } finally {
+    await page.keyboard.up('KeyD');
+  }
 });
 
 test('completes the Ember quest, saves, reloads, and continues', async ({ page, errorWatcher }) => {

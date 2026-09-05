@@ -64,6 +64,13 @@ Seven cover the release surface (`release.spec.ts`), driving the real menus with
 21. Mimi's Lost Charm completes through the real quest, chest and reward systems and survives a reload.
 22. The ending card's Return to Title saves the restored world; Continue comes back with the shrine lit.
 
+### Slow machines
+
+A GPU-less CI runner renders the game at two or three frames per second, and Phaser clamps each frame's delta
+to 200 ms. Input is queued per physical press and consumed one press per frame, so nothing collapses, and the
+tests poll while a key is held rather than trusting a fixed hold. `E2E_CPU_THROTTLE=6 npm run test:e2e`
+reproduces that runner locally through Chromium's CPU throttle; keep it green before trusting CI.
+
 ### Two harness lessons worth keeping
 
 **Traces are expensive here.** With `trace: 'retain-on-failure'`, Playwright captured a snapshot of a

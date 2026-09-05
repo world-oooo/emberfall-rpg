@@ -52,7 +52,9 @@ export class MainMenuScene extends Phaser.Scene {
     Display.applyToCamera(this.cameras.main);
     this.entries = [
       { label: 'New Game', enabled: true, action: () => this.newGame() },
-      { label: 'Continue', enabled: false, action: () => this.continueGame() },
+      // Selectable while the save slot is still being read, so a quick Down+Enter after a reload lands on
+      // Continue instead of skipping it to Options. loadContinueSlot() greys it only if there is no save.
+      { label: 'Continue', enabled: true, action: () => this.continueGame() },
       { label: 'Options', enabled: true, action: () => this.releaseMenu.open('options') },
       { label: 'Controls', enabled: true, action: () => this.releaseMenu.open('controls') },
       { label: 'Credits', enabled: true, action: () => this.releaseMenu.open('credits') },
@@ -194,7 +196,21 @@ export class MainMenuScene extends Phaser.Scene {
   }
 
   private continueGame(): void {
-    if (!this.continueSave) return;
+    if (!this.slotLoaded) {
+      // Chosen before the save read finished: wait for it, then decide. Mirrors newGame()'s deferral.
+      if (this.busy) return;
+      this.busy = true;
+      void this.slotLoad.then(() => {
+        this.busy = false;
+        if (this.scene.isActive()) this.continueGame();
+      });
+      return;
+    }
+    if (!this.continueSave) {
+      // Slot loaded and empty: keep the player on the menu rather than doing nothing silently.
+      this.moveCursor(0);
+      return;
+    }
     startNewSession(structuredClone(this.continueSave));
     this.startGame(true);
   }

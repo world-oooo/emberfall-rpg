@@ -110,6 +110,33 @@ function screenshotStats(buffer: Buffer): CanvasStats {
   return { alphaPixels, uniqueColors: colors.size, hash };
 }
 
+/** Median frame length in ms, sampled inside the page. */
+async function frameMs(page: Page): Promise<number> {
+  return page.evaluate(async () => {
+    const samples: number[] = [];
+    let last = performance.now();
+    for (let i = 0; i < 9; i += 1) {
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+      const now = performance.now();
+      samples.push(now - last);
+      last = now;
+    }
+    samples.sort((a, b) => a - b);
+    return samples[4] ?? 16;
+  });
+}
+
+/**
+ * Holds a key for `gameMs` of game time. Phaser clamps a frame's delta to 200 ms, so on a machine that renders
+ * slower than five frames per second the same wall-clock hold covers less ground; scale the hold to match.
+ */
+async function holdFor(page: Page, key: string, gameMs: number, frame: number): Promise<void> {
+  const wall = Math.round(gameMs * Math.max(1, frame / 200) + frame);
+  await page.keyboard.down(key);
+  await page.waitForTimeout(wall);
+  await page.keyboard.up(key);
+}
+
 async function canvasStats(page: Page): Promise<CanvasStats> {
   await expect(page.locator('canvas')).toBeVisible();
   return screenshotStats(await page.screenshot({ animations: 'disabled' }));
@@ -153,15 +180,12 @@ test('production build starts, moves, saves a transition, and continues without 
   // The south road is three tiles wide, but the torii at its end leaves a one-tile gap with a guard beside
   // it, so a blind walk down the centre wedges on a pillar. Take the open column west of the gate to the
   // bottom edge, step east below the gate, then walk south into the exit.
-  const hold = async (key: string, ms: number): Promise<void> => {
-    await page.keyboard.down(key);
-    await page.waitForTimeout(ms);
-    await page.keyboard.up(key);
-  };
-  await hold('KeyA', 450);
-  await hold('KeyS', 5000);
+  const frame = await frameMs(page);
+  console.log(`production smoke: median frame ${Math.round(frame)} ms`);
+  await holdFor(page, 'KeyA', 430, frame);
+  await holdFor(page, 'KeyS', 4500, frame);
   await expectCanvasChanged(page, villageCanvas);
-  await hold('KeyD', 450);
+  await holdFor(page, 'KeyD', 300, frame);
   await page.keyboard.down('KeyS');
   try {
     await expect.poll(async () => (await readSaveSlot(page))?.player?.mapId, { timeout: 30_000 }).toBe('woods');

@@ -10,7 +10,13 @@ function describeConsoleMessage(message: ConsoleMessage): string {
 }
 
 export const test = base.extend<{ errorWatcher: ErrorWatcher }>({
-  errorWatcher: async ({ page }, use) => {
+  errorWatcher: async ({ page, browserName }, use) => {
+    // E2E_CPU_THROTTLE=6 reproduces a GPU-less CI runner, where a frame can last a third of a second.
+    const throttle = Number(process.env.E2E_CPU_THROTTLE ?? '0');
+    if (throttle > 1 && browserName === 'chromium') {
+      const session = await page.context().newCDPSession(page);
+      await session.send('Emulation.setCPUThrottlingRate', { rate: throttle });
+    }
     const watcher: ErrorWatcher = { consoleErrors: [], pageErrors: [] };
     page.on('console', (message) => {
       if (message.type() === 'error') watcher.consoleErrors.push(describeConsoleMessage(message));

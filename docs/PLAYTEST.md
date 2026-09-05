@@ -35,6 +35,13 @@ A player who explores the optional content runs about 15–20 minutes; a direct 
 - **The Keeper's charge is the hardest attack to read** at 4× zoom on a small window, because the telegraph
   rectangle can start off screen. It is fair at 5× and above.
 
+## Slow machines and input
+
+Input edges are taken from the browser's own `keydown` event, once per press, and queued one-per-frame. On a
+machine that renders two or three frames a second (a GPU-less CI runner, or a heavily loaded laptop) two taps
+in one frame still register as two, and one tap never registers as two — an earlier build walked menu cursors
+two rows per press there. `E2E_CPU_THROTTLE=6 npm run test:e2e` reproduces that environment.
+
 ## Release candidate additions
 
 - **Controls.** Title and pause both open the same Options, Controls, Save Data and Credits pages. Rebinding
