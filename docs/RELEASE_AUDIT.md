@@ -15,7 +15,7 @@ Environment: Windows 11, Node 24.15.0, npm 11.12.1 (engines >= 22.12.0; CI runs 
 | Unit | Pass, 35 tests in 7 files |
 | Map validation | Pass, village / woods / shrine, reachability through seal gates |
 | Build | Pass, 153 kB game JS (46.7 kB gzip), 1.37 MB Phaser |
-| Chromium E2E | Pass, 36 tests on the dev server (15 game, 7 release surface, 2 gamepad, 2 input fallback, 10 robustness: focus loss, mid-game resize, New Game reset, pause beside an enemy, pause mid-boss, ending Continue Exploring, movement rebind, Reset Options, death to the boss, modal exclusivity), green under a 6x CPU throttle |
+| Chromium E2E | Pass, 37 tests on the dev server (15 game, 7 release surface, 2 gamepad, 2 input fallback, 11 robustness: focus loss, mid-game resize, New Game reset, pause beside an enemy, pause mid-boss, ending Continue Exploring, movement rebind, Reset Options, death to the boss, modal exclusivity, finished-save export/import round trip), green under a 6x CPU throttle |
 | Production preview | Pass: `vite preview` of the build, canvas drawn, `window.__GAME_TEST__` absent, no failed requests, no console errors, walk village → woods, reload, Continue, walk back |
 | WebKit | Completion run at 1366×768, 1440×900 and 1920×1080 (see Browser) |
 | Firefox | Completion run at 1366×768, 1440×900 and 1920×1080 (see Browser) |

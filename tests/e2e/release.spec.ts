@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from './fixtures';
 import type { Page } from './fixtures';
-import { damageEnemy, getCurrentMap, getPlayerState, getSave, interactAt, menuActivate, menuSelection, openGame, startNewGame, talkTo, teleport, waitForMainMenu, waitForScene } from './helpers/game';
+import { damageEnemy, getCurrentMap, getPlayerState, getSave, interactAt, menuActivate, menuSelection, openGame, pressForFileChooser, selectRow, startNewGame, talkTo, teleport, waitForMainMenu, waitForScene } from './helpers/game';
 
 /**
  * Release-candidate surface: controls, save management, fullscreen, credits, the side quest and the ending
@@ -16,16 +16,6 @@ const MENU_SETTLE = 260;
 async function press(page: Page, key: string, settle = MENU_SETTLE): Promise<void> {
   await page.keyboard.press(key);
   await page.waitForTimeout(settle);
-}
-
-/** Moves the highlight to a menu row by label without activating it (for rows whose action needs a live event). */
-async function selectRow(page: Page, label: string): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    if ((await menuSelection(page)) === label) return;
-    await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(160);
-  }
-  throw new Error(`Menu row "${label}" never highlighted (last: ${await menuSelection(page)})`);
 }
 
 async function activeScenes(page: Page): Promise<string[]> {
@@ -61,21 +51,6 @@ async function readSlot(page: Page): Promise<{ player?: { mapId?: string; level?
         };
       }),
   );
-}
-
-/**
- * Menus drop a press that lands inside their 160 ms ready delay, and under a loaded CPU the previous page
- * switch can land late enough that a fixed settle is not enough. Press until the browser event arrives.
- */
-async function pressForFileChooser(page: Page, key = 'Enter'): Promise<import('@playwright/test').FileChooser> {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const waiting = page.waitForEvent('filechooser', { timeout: 2_500 }).catch(() => null);
-    await page.keyboard.press(key);
-    const value = await waiting;
-    if (value) return value;
-    await page.waitForTimeout(200);
-  }
-  throw new Error(`No file chooser after pressing ${key}`);
 }
 
 /** Samples the player's FSM inside the page: a 240 ms swing is too short to observe over the CDP round trip. */

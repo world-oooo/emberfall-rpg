@@ -9,7 +9,7 @@ scripted evidence passes for screenshots, viewport coverage and frame-time measu
 |---|---|
 | `npm run check` | Strict TypeScript, unit tests, generated-map validation |
 | `npm run build` | Production bundle; catches missing or misreferenced runtime assets |
-| `npm run test:e2e` | Thirty-six Playwright tests against the real WebGL canvas |
+| `npm run test:e2e` | Thirty-seven Playwright tests against the real WebGL canvas |
 | `npm run test:production` | Production build plus production-preview smoke test; asserts no development-only test bridge |
 | `npm run test:perf` | Measurement pass → `artifacts/measurements.md`, plus a boss fight with real attacks → `artifacts/boss-balance.md` |
 | `npm run test:shots` | Screenshot baseline → `artifacts/playthrough/*.png`, including the release-candidate menus at 1366×768 |
@@ -33,7 +33,7 @@ config allows a single retry.
 
 ## Browser suite
 
-Thirty-six tests, all of which fail on any unexpected console error or page error. Fifteen cover the game:
+Thirty-seven tests, all of which fail on any unexpected console error or page error. Fifteen cover the game:
 
 1. Boots to a WebGL canvas on the main menu.
 2. The canvas fills the browser window.
@@ -77,7 +77,7 @@ keyboards and remote desktops deliver them:
 25. A keydown carrying only `key` still moves the title cursor and confirms New Game.
 26. A keydown carrying only `keyCode` still confirms.
 
-Ten cover things a player does that no feature test exercises (`robustness.spec.ts`):
+Eleven cover things a player does that no feature test exercises (`robustness.spec.ts`):
 
 27. Losing window focus while a movement key is held stops the hero, and input recovers on the next press.
 28. Resizing the window mid-game (1024×600, 1920×1080, 1366×768) keeps the display sane and the hero
@@ -95,6 +95,8 @@ Ten cover things a player does that no feature test exercises (`robustness.spec.
     shipped: a scene restart reuses the scene instance, and the new simulation-pause flag survived it.
 36. Modals are exclusive: I and Q during a dialogue open nothing, Escape closes the dialogue rather than
     opening the pause menu over it, and with the inventory open Q is ignored and Escape closes only the panel.
+37. A finished game exported from the ending, wiped by a New Game, imports from the title and continues into
+    the restored village with the ending flag and the defeated boss intact.
 
 `npm run test:perf` additionally runs `boot-gap.spec.ts`, which reads two stamps the game emits
 (`bootPreloadComplete` → `bootMenuReady`) and asserts the title menu appears within a frame of the loading bar

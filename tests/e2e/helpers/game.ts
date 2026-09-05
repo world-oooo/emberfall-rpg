@@ -189,3 +189,28 @@ export async function menuActivate(page: Page, label: string, direction: 'ArrowD
   }
   throw new Error(`Menu row "${label}" never highlighted (last: ${await menuSelection(page)})`);
 }
+
+/** Moves the highlight to a menu row by label without activating it (for rows whose action needs a live event). */
+export async function selectRow(page: Page, label: string): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if ((await menuSelection(page)) === label) return;
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(160);
+  }
+  throw new Error(`Menu row "${label}" never highlighted (last: ${await menuSelection(page)})`);
+}
+
+/**
+ * Menus drop a press that lands inside their ready delay, and under a loaded CPU a page switch can land late
+ * enough that a fixed settle is not enough. Press until the file chooser arrives.
+ */
+export async function pressForFileChooser(page: Page, key = 'Enter'): Promise<import('@playwright/test').FileChooser> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const waiting = page.waitForEvent('filechooser', { timeout: 2_500 }).catch(() => null);
+    await page.keyboard.press(key);
+    const value = await waiting;
+    if (value) return value;
+    await page.waitForTimeout(200);
+  }
+  throw new Error(`No file chooser after pressing ${key}`);
+}

@@ -79,6 +79,10 @@ Played through the captures screen by screen as a player would, and fixed what r
   even while it charged. The fix nearly shipped its own bug: Phaser restarts a scene on the same instance,
   so the pause flag survived the game-over restart and every enemy stood frozen after a respawn. A test that
   dies to the Keeper and returns for a fresh fight caught it.
+- **Toggling Hints did nothing visible.** The HUD only re-read the setting on the next quest or health event,
+  so "Q to open" stayed put. The HUD now refreshes on every settings change; a Hints-off capture joins the RC
+  set. A finished save also round-trips now in a test: export from the ending, New Game over it, import from
+  the title, Continue into the restored village.
 
 The in-app browser pane used for the first attempt reports `document.hidden`, so Chromium throttles it and
 Phaser pauses; that environment is unusable for judging feel, and the pass was done from Playwright captures.

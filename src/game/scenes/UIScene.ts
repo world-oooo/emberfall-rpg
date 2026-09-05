@@ -126,6 +126,8 @@ export class UIScene extends Phaser.Scene {
     this.refreshAll();
 
     this.unsubscribers.push(
+      // The HUD reads settings (the hint line under QUESTS); a toggle must show at once, not on the next quest event.
+      SettingsStore.onChange(() => this.refreshAll()),
       gameEvents.on('playerHealthChanged', () => this.refreshAll()),
       gameEvents.on('coinsChanged', () => this.refreshAll()),
       gameEvents.on('xpChanged', () => this.refreshAll()),

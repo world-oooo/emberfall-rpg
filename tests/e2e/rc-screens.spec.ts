@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { test } from './fixtures';
 import type { Page } from './fixtures';
-import { menuActivate, menuSelection, openGame, startNewGame, talkTo, waitForMainMenu } from './helpers/game';
+import { menuActivate, openGame, selectRow, startNewGame, talkTo, waitForMainMenu } from './helpers/game';
 
 /**
  * Screenshots of the release-candidate surfaces at 1366x768, the narrowest supported laptop size. Runs with
@@ -27,16 +27,6 @@ async function writeShot(page: Page, path: string): Promise<void> {
       await page.waitForTimeout(350);
     }
   }
-}
-
-/** Moves the highlight to a row by label without activating it. */
-async function selectRow(page: Page, label: string): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    if ((await menuSelection(page)) === label) return;
-    await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(160);
-  }
-  throw new Error(`Menu row "${label}" never highlighted`);
 }
 
 /** Menus ignore input for 160 ms after opening or switching pages. */
@@ -97,6 +87,21 @@ test('captures the release-candidate surfaces at 1366x768 @shots', async ({ page
   await menuActivate(page, 'Options');
   await selectRow(page, 'Display');
   await tap(page, 'Enter', 500);
+  await tap(page, 'Escape');
+  await tap(page, 'Escape', 400);
+  // Hints OFF: the HUD's "Q to open" line must disappear; restored afterwards.
+  await tap(page, 'Escape');
+  await menuActivate(page, 'Options');
+  await selectRow(page, 'Hints');
+  await tap(page, 'Enter', 300);
+  await tap(page, 'Escape');
+  await tap(page, 'Escape', 500);
+  console.log(`hints-off capture: showHints=${await page.evaluate(() => window.__GAME_TEST__?.getSettings().showHints)}`);
+  await shot(page, 'hints-off');
+  await tap(page, 'Escape');
+  await menuActivate(page, 'Options');
+  await selectRow(page, 'Hints');
+  await tap(page, 'Enter', 300);
   await tap(page, 'Escape');
   await tap(page, 'Escape', 400);
   // Quest log, Botan's shop and the game-over card: the three in-world surfaces the playthrough never shows.

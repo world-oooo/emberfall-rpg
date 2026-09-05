@@ -1,5 +1,6 @@
+import { readFile } from 'node:fs/promises';
 import { expect, test } from './fixtures';
-import { damageEnemy, getCurrentMap, getEnemies, getPlayerState, getSave, interactAt, menuActivate, menuSelection, openGame, startNewGame, talkTo, teleport, waitForMainMenu } from './helpers/game';
+import { damageEnemy, getCurrentMap, getEnemies, getPlayerState, getSave, interactAt, menuActivate, menuSelection, openGame, pressForFileChooser, selectRow, startNewGame, talkTo, teleport, waitForMainMenu } from './helpers/game';
 
 /**
  * Things a player does that no feature test covers: switching tabs mid-walk, resizing the window mid-game,
@@ -359,4 +360,87 @@ test('modals are exclusive: I, Q and Escape during a dialogue never stack a pane
   await page.keyboard.press('Escape');
   await expect.poll(async () => (await ui())?.panel).toBeNull();
   expect((await ui())?.menu).toBeNull();
+});
+
+test('a finished game exported from the ending imports from the title and continues into the restored village', async ({ page, errorWatcher }) => {
+  void errorWatcher;
+  test.setTimeout(240_000);
+  await openGame(page);
+  await startNewGame(page);
+  await talkTo(page, 152, 240);
+  await talkTo(page, 504, 208);
+  await teleport(page, 328, 472);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('woods');
+  for (const spawnId of ['slime_01', 'slime_02', 'slime_03', 'slime_04']) expect(await damageEnemy(page, spawnId)).toBe(true);
+  await teleport(page, 808, 80);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('shrine');
+  for (const spawnId of ['shrine_skeleton_01', 'shrine_skeleton_02', 'shrine_skeleton_03', 'shrine_skeleton_04', 'shrine_bat_01', 'shrine_bat_02', 'shrine_bat_03']) {
+    await damageEnemy(page, spawnId);
+  }
+  await interactAt(page, 120, 336);
+  await interactAt(page, 248, 256);
+  await expect.poll(async () => (await getSave(page)).flags?.['shrine.seal_open']).toBe(true);
+  await teleport(page, 248, 176);
+  await page.waitForTimeout(700);
+  expect(await damageEnemy(page, 'guardian_tanuki')).toBe(true);
+  await expect.poll(async () => (await getSave(page)).defeatedBosses?.includes('boss_racoon')).toBe(true);
+  await page.waitForTimeout(1200);
+  await interactAt(page, 248, 64);
+  await teleport(page, 240, 632);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('woods');
+  await teleport(page, 488, 8);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('village');
+  await talkTo(page, 152, 240);
+  await interactAt(page, 328, 110);
+  await expect.poll(async () => (await getSave(page)).flags?.['ending.relit_shrine']).toBe(true);
+  await page.waitForTimeout(700);
+  await page.keyboard.press('Enter'); // Continue Exploring
+  await page.waitForTimeout(600);
+
+  // Export the finished save from the pause menu.
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await menuActivate(page, 'Save Data');
+  await selectRow(page, 'Export Save');
+  const downloadPromise = page.waitForEvent('download', { timeout: 10_000 });
+  await page.keyboard.press('Enter');
+  const download = await downloadPromise;
+  const exported = await readFile((await download.path()) as string, 'utf8');
+  expect(JSON.parse(exported).flags?.['ending.relit_shrine']).toBe(true);
+
+  // Wipe it with a new game, then bring the finished save back through Import.
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await menuActivate(page, 'Save & Quit');
+  await waitForMainMenu(page);
+  await page.waitForTimeout(700);
+  await menuActivate(page, 'New Game');
+  await page.waitForTimeout(300);
+  await menuActivate(page, 'Confirm');
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('village');
+  await page.waitForTimeout(400);
+  expect((await getSave(page)).flags?.['ending.relit_shrine']).toBeUndefined();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await menuActivate(page, 'Save & Quit');
+  await waitForMainMenu(page);
+  await page.waitForTimeout(700);
+  await menuActivate(page, 'Options');
+  await menuActivate(page, 'Save Data');
+  await selectRow(page, 'Import Save');
+  const chooser = await pressForFileChooser(page);
+  await chooser.setFiles({ name: 'emberfall-save.json', mimeType: 'application/json', buffer: Buffer.from(exported) });
+  await menuActivate(page, 'Confirm');
+  await page.waitForTimeout(400);
+  // Back out of Save Data and Options to the title rows; each page ignores input briefly after a switch.
+  for (let i = 0; i < 4; i += 1) {
+    const row = await menuSelection(page);
+    if (row === 'New Game' || row === 'Continue') break;
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(350);
+  }
+  await menuActivate(page, 'Continue');
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('village');
+  await expect.poll(async () => (await getSave(page)).flags?.['ending.relit_shrine']).toBe(true);
+  expect((await getSave(page)).defeatedBosses?.includes('boss_racoon')).toBe(true);
 });
