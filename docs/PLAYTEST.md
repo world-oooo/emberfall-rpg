@@ -70,6 +70,13 @@ Played through the captures screen by screen as a player would, and fixed what r
   with no fanfare. Toasts now queue (capped at three), and one celebration — sound, burst at the hero, toast —
   serves both paths, landing a beat after "Quest complete". Fixed View (letterboxed) was also captured and
   checked at 1366×768.
+- **The world kept running while the pause menu was open.** Pausing only locked the hero: a slime next to
+  them walked 21 px and bit them (6 → 5 hearts) with the menu up, and the same held for dialogue, the shop
+  and the quest log — reading the shrine sign beside the skeletons was a free hit. Now, while any UI owns
+  the screen, enemy AI, hitboxes and Arcade physics all hold; map transitions and the boss intro never use
+  this path. Tests pause next to a slime and mid-boss-fight and check nothing moves, no damage lands, and
+  everything resumes. The boss now reports its real state machine to the DEV bridge, which had shown "idle"
+  even while it charged.
 
 The in-app browser pane used for the first attempt reports `document.hidden`, so Chromium throttles it and
 Phaser pauses; that environment is unusable for judging feel, and the pass was done from Playwright captures.

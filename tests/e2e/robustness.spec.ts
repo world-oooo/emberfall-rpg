@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { getCurrentMap, getPlayerState, getSave, menuActivate, openGame, startNewGame, teleport, waitForMainMenu } from './helpers/game';
+import { damageEnemy, getCurrentMap, getEnemies, getPlayerState, getSave, interactAt, menuActivate, menuSelection, openGame, startNewGame, talkTo, teleport, waitForMainMenu } from './helpers/game';
 
 /**
  * Things a player does that no feature test covers: switching tabs mid-walk, resizing the window mid-game,
@@ -103,4 +103,125 @@ test('New Game over an existing save starts clean: coins, level and the grove ch
   await page.waitForTimeout(150);
   await page.keyboard.press('KeyE');
   await expect.poll(async () => (await getSave(page)).player.coins).toBeGreaterThan(0);
+});
+
+test('pausing mid-boss-fight freezes the fight and resuming continues it', async ({ page, errorWatcher }) => {
+  void errorWatcher;
+  test.setTimeout(150_000);
+  await openGame(page);
+  await startNewGame(page);
+  await talkTo(page, 152, 240);
+  await talkTo(page, 504, 208);
+  await teleport(page, 328, 472);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('woods');
+  for (const spawnId of ['slime_01', 'slime_02', 'slime_03', 'slime_04']) expect(await damageEnemy(page, spawnId)).toBe(true);
+  await teleport(page, 808, 80);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('shrine');
+  for (const spawnId of ['shrine_skeleton_01', 'shrine_skeleton_02', 'shrine_skeleton_03', 'shrine_skeleton_04', 'shrine_bat_01', 'shrine_bat_02', 'shrine_bat_03']) {
+    await damageEnemy(page, spawnId);
+  }
+  await interactAt(page, 120, 336);
+  await interactAt(page, 248, 256);
+  await expect.poll(async () => (await getSave(page)).flags?.['shrine.seal_open']).toBe(true);
+  await teleport(page, 248, 176);
+
+  const boss = async () => (await getEnemies(page)).find((enemy) => enemy.spawnId === 'guardian_tanuki') ?? null;
+  // The intro (sleep -> wake) ends in idle; pause there, in the fight proper.
+  await expect.poll(async () => (await boss())?.state, { timeout: 20_000 }).toBe('idle');
+
+  // Pause: nothing in the fight may advance.
+  await page.keyboard.press('Escape');
+  await expect.poll(() => menuSelection(page)).toBe('Resume');
+  const frozen = await boss();
+  const heroHp = (await getPlayerState(page)).hp;
+  await page.waitForTimeout(1200);
+  const still = await boss();
+  expect(still?.state).toBe(frozen?.state);
+  expect(still?.hp).toBe(frozen?.hp);
+  expect(still?.x).toBe(frozen?.x);
+  expect(still?.y).toBe(frozen?.y);
+  expect((await getPlayerState(page)).hp).toBe(heroHp);
+
+  // Resume: the Keeper leaves idle for an attack within a few seconds and is still the same, living boss.
+  await page.keyboard.press('Enter');
+  await expect.poll(() => menuSelection(page)).toBeNull();
+  await expect.poll(async () => (await boss())?.state, { timeout: 8_000 }).not.toBe('idle');
+  expect((await boss())?.dead).toBe(false);
+});
+
+test('pausing next to an enemy freezes it and the damage it would deal', async ({ page, errorWatcher }) => {
+  void errorWatcher;
+  await openGame(page);
+  await startNewGame(page);
+  await teleport(page, 328, 472);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('woods');
+  const slime = async () => (await getEnemies(page)).find((e) => e.spawnId === 'slime_01') ?? null;
+  const s0 = await slime();
+  await teleport(page, Math.round((s0?.x ?? 0) + 28), Math.round(s0?.y ?? 0));
+  await page.waitForTimeout(250);
+  await page.keyboard.press('Escape');
+  await expect.poll(() => menuSelection(page)).toBe('Resume');
+  const hp = (await getPlayerState(page)).hp;
+  const p0 = await slime();
+  await page.waitForTimeout(1500);
+  const p1 = await slime();
+  expect(Math.hypot((p1?.x ?? 0) - (p0?.x ?? 0), (p1?.y ?? 0) - (p0?.y ?? 0))).toBeLessThan(1);
+  expect((await getPlayerState(page)).hp).toBe(hp);
+
+  // Resume: the slime is live again and closes in.
+  await page.keyboard.press('Enter');
+  await expect.poll(() => menuSelection(page)).toBeNull();
+  await expect
+    .poll(async () => {
+      const s = await slime();
+      return Math.hypot((s?.x ?? 0) - (p1?.x ?? 0), (s?.y ?? 0) - (p1?.y ?? 0));
+    }, { timeout: 5_000 })
+    .toBeGreaterThan(2);
+});
+
+test('the ending card\'s Continue Exploring returns control in the restored village', async ({ page, errorWatcher }) => {
+  void errorWatcher;
+  test.setTimeout(180_000);
+  await openGame(page);
+  await startNewGame(page);
+  await talkTo(page, 152, 240);
+  await talkTo(page, 504, 208);
+  await teleport(page, 328, 472);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('woods');
+  for (const spawnId of ['slime_01', 'slime_02', 'slime_03', 'slime_04']) expect(await damageEnemy(page, spawnId)).toBe(true);
+  await teleport(page, 808, 80);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('shrine');
+  for (const spawnId of ['shrine_skeleton_01', 'shrine_skeleton_02', 'shrine_skeleton_03', 'shrine_skeleton_04', 'shrine_bat_01', 'shrine_bat_02', 'shrine_bat_03']) {
+    await damageEnemy(page, spawnId);
+  }
+  await interactAt(page, 120, 336);
+  await interactAt(page, 248, 256);
+  await expect.poll(async () => (await getSave(page)).flags?.['shrine.seal_open']).toBe(true);
+  await teleport(page, 248, 176);
+  await page.waitForTimeout(700);
+  expect(await damageEnemy(page, 'guardian_tanuki')).toBe(true);
+  await expect.poll(async () => (await getSave(page)).defeatedBosses?.includes('boss_racoon')).toBe(true);
+  await page.waitForTimeout(1200);
+  await interactAt(page, 248, 64);
+  await teleport(page, 240, 632);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('woods');
+  await teleport(page, 488, 8);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('village');
+  await talkTo(page, 152, 240);
+  await interactAt(page, 328, 110);
+  await expect.poll(async () => (await getSave(page)).flags?.['ending.relit_shrine']).toBe(true);
+
+  // First choice, Continue Exploring: the card closes and the hero is free in the same, restored village.
+  await page.waitForTimeout(700);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(500);
+  expect(await getCurrentMap(page)).toBe('village');
+  const before = await getPlayerState(page);
+  await page.keyboard.down('KeyD');
+  try {
+    await expect.poll(async () => (await getPlayerState(page)).x).toBeGreaterThan(before.x + 6);
+  } finally {
+    await page.keyboard.up('KeyD');
+  }
+  expect((await getSave(page)).flags?.['ending.relit_shrine']).toBe(true);
 });

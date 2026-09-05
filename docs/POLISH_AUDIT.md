@@ -90,7 +90,7 @@ import/export, fullscreen toggle and credits.
 
 ### P2 — QA
 
-Twenty-nine end-to-end tests (two of them a synthetic gamepad, two for code-less keydowns, three for focus loss, mid-game resize and New Game reset), 35 unit tests, map validation, a production-preview smoke, a three-engine
+Thirty-two end-to-end tests (two of them a synthetic gamepad, two for code-less keydowns, six for focus loss, mid-game resize, New Game reset, pausing beside an enemy and mid-boss, and the ending's Continue Exploring), 35 unit tests, map validation, a production-preview smoke, a three-engine
 completion matrix, a scripted screenshot baseline, a scripted measurement pass and a boss fight measured with
 real attacks. See [TESTING.md](TESTING.md) and [RELEASE_AUDIT.md](RELEASE_AUDIT.md).
 
@@ -149,6 +149,8 @@ Found by playing the release candidate screen by screen:
     collided with its header hint. Neither panel, nor the game-over card, was in the capture baseline.
 21. A level gained from a quest reward had no toast or sound, and toasts replaced one another, so back-to-back
     events lost their first message. The first level-up in the game is a quest reward.
+22. Pausing only locked the hero; enemies kept moving and dealing damage behind the pause menu, dialogue,
+    shop and quest log. The simulation now holds whenever UI owns the screen.
 
 ## Comparison references
 

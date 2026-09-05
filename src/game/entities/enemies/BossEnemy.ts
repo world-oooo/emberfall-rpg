@@ -354,6 +354,11 @@ export class BossEnemy extends BaseEnemy {
     return this.awake;
   }
 
+  /** The boss runs its own state machine; report that, not the base chaser state, to the DEV bridge. */
+  override get stateName(): string {
+    return this.fsm.name ?? 'none';
+  }
+
   override update(delta: number, target: EnemyTarget, _spawnHitbox: EnemyHitboxSink): void {
     void _spawnHitbox;
     if (this.destroyed || this.health.isDead) return;

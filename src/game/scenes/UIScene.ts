@@ -931,6 +931,7 @@ export class UIScene extends Phaser.Scene {
     world.player.controlLocked = locked;
     world.player.body.velocity.set(0, 0);
     world.inputActions.setEnabled(false);
+    world.setSimulationPaused(locked);
     if (!world.player.health.isDead) world.player.fsm.set(locked ? 'interact' : 'idle');
     if (!locked) {
       // Confirm and interact share keys. Let the closing key fully release before world input resumes,

@@ -25,6 +25,11 @@
 - M16 — Release verification: GitHub CI (check, build, Chromium E2E, production smoke on every push; three-engine
   matrix nightly), seven release-surface E2E tests, the Mimi side quest end to end, a boss fight measured with
   real attacks and rebalanced on the result, and documentation synced to the code.
+- M17 — Hands-on pass: played every screen from captures and fixed what read badly — blank pause after the
+  loading bar, Options layout and adjust affordance, toast and prompt placement, panel header language,
+  wrap-aware quest log and shop rows, quest-reward level-up fanfare, code-less keydowns; found and fixed the
+  world running behind the pause menu and dialogue; added gamepad, input-fallback and robustness tests
+  (focus loss, resize, New Game reset, pause beside an enemy and mid-boss, Continue Exploring).
 
 ## Later
 

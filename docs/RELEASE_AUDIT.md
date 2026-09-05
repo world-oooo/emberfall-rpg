@@ -15,7 +15,7 @@ Environment: Windows 11, Node 24.15.0, npm 11.12.1 (engines >= 22.12.0; CI runs 
 | Unit | Pass, 35 tests in 7 files |
 | Map validation | Pass, village / woods / shrine, reachability through seal gates |
 | Build | Pass, 153 kB game JS (46.7 kB gzip), 1.37 MB Phaser |
-| Chromium E2E | Pass, 29 tests on the dev server (15 game, 7 release surface, 2 gamepad, 2 input fallback, 3 robustness: focus loss, mid-game resize, New Game reset), green under a 6x CPU throttle |
+| Chromium E2E | Pass, 32 tests on the dev server (15 game, 7 release surface, 2 gamepad, 2 input fallback, 6 robustness: focus loss, mid-game resize, New Game reset, pause beside an enemy, pause mid-boss, ending Continue Exploring), green under a 6x CPU throttle |
 | Production preview | Pass: `vite preview` of the build, canvas drawn, `window.__GAME_TEST__` absent, no failed requests, no console errors, walk village → woods, reload, Continue, walk back |
 | WebKit | Completion run at 1366×768, 1440×900 and 1920×1080 (see Browser) |
 | Firefox | Completion run at 1366×768, 1440×900 and 1920×1080 (see Browser) |
@@ -103,8 +103,11 @@ panel with room for them, with no sign that left/right adjusts a value (13 px ro
 height, selected adjustable value shown between arrow sprites); toasts covering the hero at the bottom of the
 screen (now anchored under the HUD row, area banner or boss bar); the world prompt staying up during the
 dialogue it opened and colliding with the quest tracker near the top of the view; panel headers in bare key
-names; and keydown events without a `code` being invisible to input. All re-verified: 26/26 E2E, shots
-regenerated, boot gap measured before and after. Details in PLAYTEST.md and POLISH_AUDIT.md.
+names; keydown events without a `code` being invisible to input; the quest log and shop overwriting wrapped
+rows; a quest-reward level-up with no fanfare; and — found by a pause test — the world continuing to run
+behind the pause menu, dialogue, shop and quest log, where a slime bit the locked hero. The simulation now
+holds while UI owns the screen. All re-verified: 32/32 E2E, shots regenerated, boot gap measured before and
+after. Details in PLAYTEST.md and POLISH_AUDIT.md.
 
 ## Verification record
 

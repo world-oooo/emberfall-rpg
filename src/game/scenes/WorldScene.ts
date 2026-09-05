@@ -281,11 +281,26 @@ export class WorldScene extends Phaser.Scene {
     endSession();
   }
 
+  /** True while a menu, dialogue or card owns the screen: enemies, hitboxes and physics all hold still. */
+  private simulationPaused = false;
+
+  /**
+   * Pausing used to lock only the hero: with the pause menu open a slime still walked up and bit them, and the
+   * same held for dialogue, the shop and the quest log. While any UI owns the screen the whole simulation
+   * holds — enemy AI, hitboxes and Arcade physics. Map transitions and the boss intro never use this.
+   */
+  setSimulationPaused(paused: boolean): void {
+    if (this.simulationPaused === paused) return;
+    this.simulationPaused = paused;
+    if (paused) this.physics.world.pause();
+    else this.physics.world.resume();
+  }
+
   override update(time: number, delta: number): void {
     this.inputActions.update(time);
     if (!this.player.controlLocked && !this.player.health.isDead && this.inputActions.pressed('throw')) this.throwShuriken();
     this.player.update(delta);
-    this.combat.update(delta);
+    if (!this.simulationPaused) this.combat.update(delta);
     if (!this.player.controlLocked && !this.player.health.isDead) this.interactions.update();
     else this.interactions.hidePrompt();
     this.player.postUpdate();
