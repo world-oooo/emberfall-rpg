@@ -104,6 +104,7 @@ export class UIScene extends Phaser.Scene {
     // Phaser reuses scene instances after returning to the title. Display objects do not survive shutdown.
     this.hearts = [];
     this.banner = this.toast = this.panel = this.dialogue = this.transition = this.special = this.bossHud = null;
+    this.toastQueue = [];
     this.panelKind = null;
     this.dialogueNode = null;
     this.dialogueBody = this.dialogueChoices = this.bossName = null;
@@ -774,6 +775,16 @@ export class UIScene extends Phaser.Scene {
     }
     container.add(items);
     this.panel = container;
+  }
+
+  /** What owns the screen right now, for DEV/test checks that modals never stack. */
+  getUiState(): { dialogue: boolean; panel: string | null; special: boolean; menu: string | null } {
+    return {
+      dialogue: this.dialogue !== null,
+      panel: this.panel ? this.panelKind : null,
+      special: this.special !== null,
+      menu: this.releaseMenu?.active ? this.releaseMenu.selectionLabel : null,
+    };
   }
 
   /** Label of the highlighted release-menu row, for DEV/test navigation. Null when no release menu is open. */

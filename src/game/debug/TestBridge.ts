@@ -30,6 +30,7 @@ export interface GameTestBridge {
   healPlayer: (amount?: number) => boolean;
   saveNow: () => Promise<void>;
   getMenuSelection: () => string | null;
+  getUiState: () => { dialogue: boolean; panel: string | null; special: boolean; menu: string | null };
   getActiveDevice: () => 'keyboard' | 'gamepad';
   /** First-boot stamps: loader complete and title menu drawn (performance.now ms; 0 until they happen). */
   getBootTimeline: () => { preloadCompleteAt: number; menuReadyAt: number };
@@ -83,6 +84,10 @@ export function installTestBridge(game: Phaser.Game): void {
       return null;
     },
     getActiveDevice: () => inputBindingStore.getActiveDevice(),
+    getUiState: () => {
+      const ui = game.scene.getScene('UIScene') as { getUiState?: () => { dialogue: boolean; panel: string | null; special: boolean; menu: string | null } } | null;
+      return (ui && game.scene.isActive('UIScene') ? ui.getUiState?.() : undefined) ?? { dialogue: false, panel: null, special: false, menu: null };
+    },
     startScene: (key, data) => game.scene.start(key, data),
     teleport: (x, y) => {
       const current = world();

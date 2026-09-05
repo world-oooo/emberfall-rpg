@@ -322,3 +322,41 @@ test('dying to the boss respawns at the checkpoint and the fight restarts fresh'
   const hero = await getPlayerState(page);
   expect(hero.hp).toBe(hero.maxHp);
 });
+
+test('modals are exclusive: I, Q and Escape during a dialogue never stack a panel or the pause menu', async ({ page, errorWatcher }) => {
+  void errorWatcher;
+  await openGame(page);
+  await startNewGame(page);
+  const ui = () => page.evaluate(() => window.__GAME_TEST__?.getUiState() ?? null);
+
+  // Open Elder Hana's dialogue and leave it open.
+  await teleport(page, 152, 240);
+  await page.keyboard.press('ArrowUp');
+  await page.waitForTimeout(150);
+  await page.keyboard.press('KeyE');
+  await expect.poll(async () => (await ui())?.dialogue).toBe(true);
+  await page.waitForTimeout(400);
+
+  await page.keyboard.press('KeyI');
+  await page.waitForTimeout(300);
+  expect(await ui()).toMatchObject({ dialogue: true, panel: null, menu: null });
+  await page.keyboard.press('KeyQ');
+  await page.waitForTimeout(300);
+  expect(await ui()).toMatchObject({ dialogue: true, panel: null, menu: null });
+
+  // Escape closes the dialogue rather than opening the pause menu over it.
+  await page.keyboard.press('Escape');
+  await expect.poll(async () => (await ui())?.dialogue).toBe(false);
+  await page.waitForTimeout(300);
+  expect(await ui()).toMatchObject({ dialogue: false, panel: null, menu: null });
+
+  // With the inventory open, Q is ignored and Escape closes the panel, nothing more.
+  await page.keyboard.press('KeyI');
+  await expect.poll(async () => (await ui())?.panel).toBe('inventory');
+  await page.keyboard.press('KeyQ');
+  await page.waitForTimeout(300);
+  expect((await ui())?.panel).toBe('inventory');
+  await page.keyboard.press('Escape');
+  await expect.poll(async () => (await ui())?.panel).toBeNull();
+  expect((await ui())?.menu).toBeNull();
+});
