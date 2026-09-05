@@ -147,6 +147,8 @@ Found by playing the release candidate screen by screen:
 19. A keydown without a `code` (IMEs, virtual keyboards, remote desktops) never reached the input layer.
 20. Quest-log objectives and shop descriptions that wrapped were overwritten by the next row; "BOTAN STALL"
     collided with its header hint. Neither panel, nor the game-over card, was in the capture baseline.
+21. A level gained from a quest reward had no toast or sound, and toasts replaced one another, so back-to-back
+    events lost their first message. The first level-up in the game is a quest reward.
 
 ## Comparison references
 

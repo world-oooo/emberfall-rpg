@@ -52,6 +52,8 @@ export class UIScene extends Phaser.Scene {
   private questLabel!: Phaser.GameObjects.BitmapText;
   private banner: Phaser.GameObjects.Container | null = null;
   private toast: Phaser.GameObjects.Container | null = null;
+  /** Toasts that arrived while one was showing; shown in order so back-to-back events are not lost. */
+  private toastQueue: string[] = [];
   private inputActions!: InputActions;
 
   private panel: Phaser.GameObjects.Container | null = null;
@@ -282,7 +284,12 @@ export class UIScene extends Phaser.Scene {
   }
 
   showToast(text: string): void {
-    this.toast?.destroy(true);
+    if (this.toast) {
+      // "Found Heavy Blade" used to vanish the instant "Quest complete" followed it. Queue, capped so a burst
+      // of events cannot pin messages on screen for long.
+      if (this.toastQueue.length < 3) this.toastQueue.push(text);
+      return;
+    }
     const maxWidth = Math.min(this.w - 48, 216);
     const label = this.add.bitmapText(0, 6, Tex.font, text, 8).setOrigin(0.5, 0).setTint(UiColor.text).setMaxWidth(maxWidth).setCenterAlign();
     const width = Math.min(this.w - 24, Math.max(90, label.width + 26));
@@ -307,6 +314,8 @@ export class UIScene extends Phaser.Scene {
       onComplete: () => {
         container.destroy(true);
         if (this.toast === container) this.toast = null;
+        const next = this.toastQueue.shift();
+        if (next !== undefined && this.scene.isActive()) this.showToast(next);
       },
     });
   }

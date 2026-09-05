@@ -64,6 +64,12 @@ Played through the captures screen by screen as a player would, and fixed what r
   counters sit right-aligned on the first line, panel hints are just "Escape BACK" with an explicit "E BUY"
   beside the shop's coin count, and both panels are tall enough for their content at 720p. These two screens,
   plus the game-over card, were never in the capture baseline before; they are now.
+- **The first level-up was silent.** A level earned from an enemy kill got a toast and a sound; one earned from
+  a quest reward got neither, and the quest's own toast would have replaced it anyway because toasts
+  replaced each other. The first level a real player earns is the Dimmed Shrine reward, so that was the one
+  with no fanfare. Toasts now queue (capped at three), and one celebration — sound, burst at the hero, toast —
+  serves both paths, landing a beat after "Quest complete". Fixed View (letterboxed) was also captured and
+  checked at 1366×768.
 
 The in-app browser pane used for the first attempt reports `document.hidden`, so Chromium throttles it and
 Phaser pauses; that environment is unusable for judging feel, and the pass was done from Playwright captures.

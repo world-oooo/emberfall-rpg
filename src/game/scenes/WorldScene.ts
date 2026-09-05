@@ -427,6 +427,19 @@ export class WorldScene extends Phaser.Scene {
     this.ui?.refreshAll();
   }
 
+  /** Sound, a burst at the hero and a toast; the toast queues if another is showing. */
+  private celebrateLevelUp(level: number, delayMs = 0): void {
+    gameEvents.emit('levelUp', { level, maxHp: this.session.save.player.maxHp });
+    this.ui?.showToast(`Level ${level}! Your flame grows stronger.`);
+    const fanfare = (): void => {
+      if (!this.scene.isActive()) return;
+      this.audio?.playSfx('level_up');
+      this.combat.effectsLayer.levelUp(this.player.x, this.player.y - 4);
+    };
+    if (delayMs > 0) this.time.delayedCall(delayMs, fanfare);
+    else fanfare();
+  }
+
   private onEnemyDefeated(enemyId: string, spawnId: string): void {
     const definition = getEnemy(enemyId);
     const previousMaxHp = this.session.save.player.maxHp;
@@ -435,9 +448,7 @@ export class WorldScene extends Phaser.Scene {
     gameEvents.emit('xpChanged', { xp: xp.xp, level: xp.level });
     if (xp.levelsGained > 0) {
       this.player.combat.setAttackBonus(attackBonusForLevel(xp.level));
-      gameEvents.emit('levelUp', { level: xp.level, maxHp: this.session.save.player.maxHp });
-      this.ui?.showToast(`Level ${xp.level}! Your flame grows stronger.`);
-      this.audio.playSfx('level_up');
+      this.celebrateLevelUp(xp.level);
     }
     this.applyQuestUpdates(this.quests.recordEnemyDefeated(enemyId));
 
@@ -478,10 +489,12 @@ export class WorldScene extends Phaser.Scene {
       gameEvents.emit('xpChanged', { xp: this.session.save.player.xp, level: this.session.save.player.level });
       gameEvents.emit('coinsChanged', { coins: this.session.save.player.coins, delta: reward.coins ?? 0 });
       for (const item of reward.items ?? []) gameEvents.emit('itemAcquired', { itemId: item.itemId, quantity: item.quantity });
-      if (this.session.save.player.level > beforeLevel) gameEvents.emit('levelUp', { level: this.session.save.player.level, maxHp: this.session.save.player.maxHp });
       this.player.combat.setAttackBonus(attackBonusForLevel(this.session.save.player.level));
       this.audio?.playSfx('quest_complete');
       this.ui?.showToast(`Quest complete: ${quest.title}`);
+      // A level earned from the reward is its own beat, after the quest's: the toast queues behind it and the
+      // sound and burst land a moment later. This is the first level-up most players see.
+      if (this.session.save.player.level > beforeLevel) this.celebrateLevelUp(this.session.save.player.level, 650);
       const guardian = this.quests.getProgress('quest_sleeping_guardian');
       if (guardian.status === 'active') gameEvents.emit('questUpdated', { questId: 'quest_sleeping_guardian', status: 'active' });
     }

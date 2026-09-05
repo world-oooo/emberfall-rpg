@@ -93,6 +93,8 @@ test('captures the playthrough baseline @shots', async ({ page, errorWatcher }) 
   await teleport(page, 808, 80);
   await expect_map(page, 'shrine');
   await shot(page, 'shrine-entrance', 1200);
+  // The quest reward on arrival is the first level-up; its toast queues behind "Quest complete" (~1.8 s).
+  await shot(page, 'level-up', 1300);
 
   // Brazier puzzle and the vault it opens.
   for (const [x, y] of [[184, 616], [296, 616], [152, 412], [328, 412]] as [number, number][]) {
