@@ -20,9 +20,11 @@ A wins on onboarding flow (safe village → field → dungeon), landmark variety
 
 - **Player goal:** relight the Ember of Kagehara, the village shrine flame.
 - **Immediate local problem:** the ember went dark three nights ago; forest creatures turned hostile and the road to the shrine is cut off.
-- **Mystery:** something *took* the ember; the Tanuki Guardian that protected the shrine is now corrupted by whatever did.
-- **Dungeon resolution:** defeat the Guardian, recover the ember, carry it back, relight the shrine.
-- **Hook for later:** a masked figure was seen leaving the shrine (the Guardian drops a broken mask). Sequel content: who, and why.
+- **Mystery:** something *took* the ember; the shrine's old guardian, now known in-game as the Mask Keeper, is
+  corrupted by whatever did.
+- **Dungeon resolution:** defeat the Mask Keeper, recover the ember, carry it back, relight the shrine.
+- **Hook for later:** a masked figure was seen leaving the shrine, and the boss drops a broken mask. Sequel
+  content: who, and why.
 
 Tone: warm, slightly melancholic, light humor from villagers. Text is short; no lore dumps.
 
@@ -38,8 +40,8 @@ Every screen has a reason to exist (combat, discovery, story, resource, secret, 
 
 - 16×16 hero ("Actor/CharacterAnimated/NinjaGreen"): idle, walk (4 dirs), attack (4 frames × 4 dirs), roll, hit, dead, item-hold.
 - 8-direction movement, normalized diagonals, instant start, short stop-slide (~40 ms) for weight.
-- **Attack** (J / Z / Space, gamepad A): directional katana slash. Startup 80 ms → active 120 ms → recovery 160 ms. Hitbox only during active frames. Slash VFX from the pack. Buffered input: pressing attack during recovery queues the next swing (up to a 3-hit chain with the third hit heavier).
-- **Roll** (K / X / Shift, gamepad B): 220 ms dash, invulnerable frames 40–180 ms, 350 ms cooldown, cancels attack recovery. Teaches itself via the mushroom spore.
+- **Attack** (J / Z / Space, gamepad A; rebindable): directional katana slash in a three-cut chain of 55/90/95 ms, 50/90/105 ms and 85/115/185 ms (startup/active/recovery), the third cut at 1.45x damage with a longer lunge. Hitbox only during active frames. Presses are buffered for 170 ms, the chain stays open for 460 ms, and the tail of recovery cancels into a roll. Each cut's animation is stretched to the exact length of its state so nothing outlives what is shown.
+- **Roll** (K / X / Shift, gamepad B; rebindable): 300 ms dash at 210 px/s, invulnerable for its first 235 ms, 260 ms cooldown, cancels attack recovery. The Fox Charm adds 20% speed and 60 ms of invulnerability. Teaches itself via the Spore Cap.
 - **Interact** (E / Enter, gamepad X): NPCs, chests, signs, shrine, doors.
 - **Throw shuriken** (L / C, gamepad Y): consumable ranged attack, 3 damage, for the mushroom and bat.
 - Stats: HP (hearts, start 6 = 3 hearts), Attack (weapon), Level 1→6 across the slice. Level-up: +1 heart every 2 levels, +1 attack every level.
@@ -48,21 +50,22 @@ Every screen has a reason to exist (combat, discovery, story, resource, secret, 
 
 | Enemy | Sprite | Identity | Behaviour |
 |---|---|---|---|
-| Forest Slime | Monster/Slime | **Chaser** — weak, teaches attack | Idle → chase when within 6 tiles → hop-lunge (telegraph: squash 300 ms) → recover 500 ms. 3 HP, 1 dmg. |
-| Spore Cap | Monster/Mushroom | **Ambusher / ranged** — teaches roll and spacing | Sits still (looks like scenery) → when within 5 tiles: wake (telegraph 400 ms, shake) → spits 3 spores in a spread every 1.6 s, keeps distance. 4 HP, 1 dmg. |
-| Cave Bat | Monster/BlueBat | **Erratic swooper** — teaches timing | Hovers out of reach → telegraph (hover flash 350 ms) → dive through the player position → retreat 1.2 s. 2 HP, 1 dmg. |
-| Shrine Skeleton | Character/Skeleton | **Heavy** — teaches reading big telegraphs | Slow walk → when within 2 tiles: wind-up 600 ms (raises blade, red flash) → wide swing, big knockback → long recovery 900 ms (punish window). 8 HP, 2 dmg. |
+| Forest Slime | Monster/Slime | **Chaser** — weak, teaches attack | Idle → hops in pulses toward the player from ~5 tiles → 180 ms wind-up (ground circle) → 150 ms lunge → 820 ms cooldown. 4 HP, 1 dmg. |
+| Spore Cap | Monster/Mushroom | **Zoner** — teaches roll and spacing | Keeps its distance, backing off when the player closes → 420 ms wind-up (ring telegraph) → spore burst around itself for 180 ms → 1.35 s cooldown. 5 HP, 1 dmg. |
+| Shrine Bat | Monster/BlueBat | **Swooper** — teaches timing | Weaves in on a sine → 120 ms wind-up (charge telegraph) → 170 ms bite → peels away for the first 320 ms of a 760 ms cooldown. 3 HP, 1 dmg. |
+| Hollow Guard | Character/Skeleton | **Heavy** — teaches reading big telegraphs | Walks straight in → 280 ms wind-up (squash, ground circle) → steps through a 120 ms swing at 1.7x speed, big knockback → 1.05 s recovery (punish window). 7 HP, 2 dmg. At most two regular enemies may be winding up or swinging at once. |
 
 Four enemies, four different questions asked of the player. Counts stay low; placement does the work.
 
-## 6. Boss — the Tanuki Guardian (Boss/GiantRacoon)
+## 6. Boss — the Mask Keeper (Boss/GiantRacoon)
 
-Arena: shrine inner hall (14×10 tiles, pillars as cover). Intro: camera pan + name plate + "Fight" music.
+Arena: shrine inner hall (20×12 tiles, four pillars as cover, the ember pedestal behind). Entering it locks the camera to the room, wakes the Keeper, swaps to the boss track and shows the name plate; leaving the room hands the camera back.
 
-- **Pattern A — Leap Slam:** telegraph (crouch 500 ms, shadow grows) → jumps to the player's position → lands with a ring shockwave (roll through it). Recovery 900 ms.
-- **Pattern B — Charge Claw:** telegraph (Charge sheet, 700 ms, ground dust) → rushes in a straight line → stops at walls (stunned 1.2 s if it hits a pillar).
-- **Pattern C (phase 2, ≤50% HP):** summons 2 slimes, patterns speed up 20%, adds a double leap.
-- 60 HP. Drops the Ember (quest item) and the Broken Mask (hook). Reward: level-up, "Guardian's Charm" (+1 heart).
+- **Swipe:** inside ~52 px. Squash wind-up with a red ground circle → 150 ms claw hitbox → recovery.
+- **Charge:** from 46 px out. Wind-up with a rectangle telegraph along the charge line → rushes at 320 px/s → stops on walls and pillars, stunned with a visible wobble: the main punish window.
+- **Spirit Burst:** at range. Ring telegraph → eight spirit orbs in a circle (ten in phase 2); orbs die on walls and after a short life.
+- **Phase 2 (≤50% HP):** tint flash and roar; the attack mix shifts, attacks chain into follow-ups and the burst grows. No summons.
+- 42 HP, sized for a 90–150 s fight against a player who reads the telegraphs (`artifacts/boss-balance.md` records the measured floor). Drops the Broken Mask (hook); the Ember waits on the pedestal behind it. Quest reward: 120 XP and the Guardian's Charm (+1 heart).
 
 ## 7. World
 
@@ -79,8 +82,8 @@ Transitions are doors/edges defined in map data; the world scene swaps map data 
 | ID | Title | Giver | Objectives | Reward |
 |---|---|---|---|---|
 | `quest_dimmed_shrine` | The Dimmed Shrine | Elder Hana | Talk to Master Ryo → reach the Woods → defeat 4 slimes → reach the shrine entrance | 40 XP, 30 coins |
-| `quest_sleeping_guardian` | The Sleeping Guardian | (auto after previous) | Find the shrine key → defeat the Guardian → take the Ember → return to Hana → relight the shrine | 120 XP, Guardian's Charm, ending scene |
-| `quest_lost_charm` (side) | Mimi's Lost Charm | Mimi | Find the charm in the secret grove → return | 30 XP, Fox Charm (+10% roll speed) |
+| `quest_sleeping_guardian` | The Sleeping Guardian | (auto after previous) | Find the shrine key → defeat the Mask Keeper → take the Ember → return to Hana → relight the shrine | 120 XP, Guardian's Charm, ending scene |
+| `quest_lost_charm` (side) | Mimi's Lost Charm | Mimi | Find the charm in the secret grove → return | 30 XP, 15 coins, Life Potion; the Fox Charm (+20% roll speed) stays with the player |
 
 Quest state is data-driven and saved. NPC lines change with quest state.
 
@@ -89,12 +92,12 @@ Quest state is data-driven and saved. NPC lines change with quest state.
 | ID | Type | Effect |
 |---|---|---|
 | `katana` | weapon | fast, 2 dmg, reach 14 px, knockback 90 |
-| `heavy_blade` | weapon (shop 120c) | slow (1.6× timings), 4 dmg, reach 18 px, knockback 180 |
+| `heavy_blade` | weapon (shop 80c, or free from the keepers' vault) | slow (1.6× timings), 4 dmg, reach 18 px, knockback 180 |
 | `shuriken` | consumable, stack 20 | thrown projectile, 3 dmg |
-| `rice_ball` | consumable, stack 10 | heal 2 HP |
-| `life_potion` | consumable, stack 5 | heal 6 HP |
+| `rice_ball` | consumable, stack 10 | heals 4 HP (2 hearts) |
+| `life_potion` | consumable, stack 5 | full heal |
 | `guardian_charm` | accessory | +1 heart |
-| `fox_charm` | accessory | roll faster + longer i-frames |
+| `fox_charm` | accessory | +20% roll speed, +60 ms roll invulnerability |
 | `shrine_key` | key | opens the sealed shrine door |
 | `ember` | quest | relights the shrine |
 | `broken_mask` | quest | story hook |
@@ -104,8 +107,8 @@ Equipment slots: weapon, accessory. Two weapons that play differently beat five 
 
 ## 10. Progression & economy
 
-- XP from enemies (slime 5, spore 8, bat 6, skeleton 15, boss 100). Level thresholds: 20, 50, 90, 140, 200.
-- Coins from chests and drops; the shop sells rice balls (10c), shuriken ×5 (15c), life potion (40c), heavy blade (120c).
+- XP from enemies (slime 2, spore 3, bat 3, skeleton 5, boss 40) and quests (40, 120, 30). Level thresholds: 20, 50, 90, 140, 200; +1 heart every second level.
+- Coins from chests and drops; the shop sells rice balls (10c), shuriken ×5 (15c), life potion (40c), heavy blade (80c).
 - Money exists to buy the heavy blade before the shrine, or potions for the boss. That is the only balancing target.
 
 ## 11. Onboarding (teach by play)
@@ -118,7 +121,7 @@ Readable, avoidable, punishing enough to matter. Enemy contact damage only durin
 
 ## 13. Vertical slice acceptance
 
-Main menu → New Game → village → Hana → dojo → forest → slimes → chest → spore caps → shrine → key → skeletons/bats → Guardian → Ember → return → relight → quest complete → save → refresh → Continue restores everything. No dev commands needed.
+Main menu → New Game → village → Hana → dojo → forest → slimes → chest → spore caps → shrine → key → skeletons/bats → Mask Keeper → Ember → return → relight → quest complete → save → refresh → Continue restores everything. No dev commands needed.
 
 ## 14. Out of scope (for the slice)
 

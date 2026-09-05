@@ -16,6 +16,7 @@ export interface GameSave {
     hp: number;
     maxHp: number;
     coins: number;
+    level: number;
   };
   inventory?: Array<{ itemId: string; quantity: number }>;
   quests?: Record<string, { status: string; objectives: Record<string, number> }>;
@@ -45,7 +46,7 @@ declare global {
       getSave: () => GameSave | null;
       getInventory: () => unknown;
       getQuests: () => unknown;
-      getSettings: () => { masterVolume: number; musicVolume: number; sfxVolume: number; screenShake: boolean; displayMode: 'fill' | 'fixed'; showHints: boolean };
+      getSettings: () => { masterVolume: number; musicVolume: number; sfxVolume: number; screenShake: boolean; displayMode: 'fill' | 'fixed'; showHints: boolean; fullscreen: boolean };
       getDisplay: () => { zoom: number; width: number; height: number; canvasWidth: number; canvasHeight: number; mode: 'fill' | 'fixed' };
       getEnemies: () => unknown[];
       getActiveInteraction: () => string | null;

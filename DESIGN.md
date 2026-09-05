@@ -12,7 +12,7 @@
 - Avoid: mixed asset families, smooth/vector UI inside the game, lore dumps, excessive bloom/shake, noisy debug overlays, imitation of a commercial game's characters or maps.
 
 ## Product goals
-- Goals: deliver a coherent 12–20 minute browser action-RPG from New Game to the relit shrine and a restorable save.
+- Goals: deliver a compact browser action-RPG from New Game to the relit shrine and a restorable save; target 15–25 minutes for a first playthrough, subject to playtesting.
 - Non-goals: multiplayer, backend, crafting, skill trees, localization, procedural worlds, live service, extra dungeons.
 - Success signals: the documented village → woods → shrine → guardian → return loop works without developer commands; a first-time player understands movement, interaction, combat, roll, objectives, rewards, and saving through play.
 
@@ -31,7 +31,7 @@
 - One visual language: Ninja Adventure art, 16 px world grid, bitmap text, warm wood panels, restrained pack-native VFX.
 - Clarity over quantity: few enemies/items/NPCs, each with a distinct purpose.
 - Preserve player momentum: dialogue is short, transitions are fast, errors explain recovery, save points are predictable.
-- Tradeoffs: fixed 480×270 framing preserves combat readability and pixel integrity over adaptive world visibility; English-only text preserves the supplied bitmap font and is an explicit slice constraint.
+- Tradeoffs: Fill Window adapts the logical view at integer camera zoom for readable combat; optional Fixed View frames 400×225. English-only text preserves the supplied bitmap font and the compact release scope.
 
 ## Visual language
 - Color: Ninja Adventure palette; amber `#f0b45a` for focus/reward, parchment `#f2ead8` for primary text, muted tan `#9a8f80` for secondary text, deep violet-black `#0b0a12` for shell/backdrops, red `#e05656` for danger.
@@ -56,7 +56,7 @@
 
 ## Responsive behavior
 - Supported breakpoints/devices: desktop Chromium/Firefox/Edge, laptop through large monitor; keyboard and common gamepads.
-- Layout adaptations: fixed 480×270 game coordinates, largest fitting integer zoom, centered canvas, vignette letterbox, zoom recalculated on resize/fullscreen.
+- Layout adaptations: DisplaySystem selects integer camera zoom from the actual browser size. Fill Window claims the canvas; Fixed View uses a centered 400×225 view. Layout all surfaces from Display.width/height, including 320×180 on a 1280×720 window. Recalculate on resize/fullscreen.
 - Touch/hover differences: touch play is out of scope; no essential hover interaction.
 
 ## Interaction states
@@ -74,7 +74,7 @@
 
 ## Implementation constraints
 - Framework/styling system: Phaser 4.2.1 + TypeScript + Vite; Phaser game objects for all in-game UI; HTML/CSS shell only; no React or new UI dependency.
-- Design-token constraints: 16×16 tiles, 480×270 internal resolution, nearest-neighbor filtering, integer zoom/positions at rest, documented depth bands.
+- Design-token constraints: 16×16 tiles, adaptive logical viewport or fixed 400×225, nearest-neighbor filtering, integer zoom/positions at rest, documented depth bands.
 - Performance constraints: map-scoped world assets/music, small active enemy counts, bounded particles, no per-frame object churn in hot paths.
 - Compatibility constraints: browser audio unlock, focus/visibility handling, captured gameplay keys, static hosting paths, versioned IndexedDB save.
 - Test/screenshot expectations: unit coverage for pure game rules, Playwright smoke/full-flow checks, console/resource-error review, and screenshots for menu, village, combat, dialogue, inventory, shrine, boss, and ending.
@@ -82,3 +82,13 @@
 ## Open questions
 - [ ] Final tuning of damage, enemy counts, and shop prices remains playtest-owned; it must not expand content scope.
 - [ ] Fullscreen may be exposed in Settings only if the browser runtime proves reliable; windowed play is always the baseline.
+
+## Release Candidate presentation contract
+
+- Preserve warm amber highlights, blue/violet shadows, bitmap text and existing wood frames.
+- Title: one clear EMBERFALL wordmark, brief subtitle, New Game / Continue / Options / Controls / Credits. Place full control explanations inside Controls, with only a short confirm hint on the title.
+- Use existing Ninja Adventure trees, torii, lanterns and fire/spark textures for a quiet title vignette; keep the world assets visually consistent and bounded in cost.
+- Continue shows place and level/time; New Game with saved progress offers a cancel-first warning.
+- Shared options are consistent in title and pause. Rebinding displays conflicts. All overlays retain a visible keyboard/gamepad focus and Escape fallback.
+- Save failures keep the current journey open. Import is validated before replacement confirmation. Credits match docs/ASSET_LICENSES.md.
+- Ending shows closure and journey statistics, then allows continued exploration or a saved return to title.

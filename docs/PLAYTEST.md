@@ -24,18 +24,37 @@ A player who explores the optional content runs about 15–20 minutes; a direct 
 - **The brazier puzzle is easy to miss.** The sign in the entrance hall is the only hint, and a player who
   runs straight up the stair will never learn the vault exists. That is deliberate for a secret, but it means
   most players will finish without the heavy blade.
+- **Mashing the boss was a strategy.** A bot that walked in and swung killed the 42 HP Keeper in 4.4 s while
+  taking two hits, a quarter of that during the wake roar. The intro is now invulnerable, cuts into a wind-up
+  or charge do half damage, three cuts taken while it drifts trigger a counter, and it has 140 HP; the same bot
+  now needs 21.7 s and eats 13 hits, which a player cannot survive. See PERFORMANCE.md for the table.
 - **The shortcut arrives late.** It is barred from the arena side, so its value is one walk back. It pays off
   for a player who dies to the boss and returns, and does very little otherwise.
-- **Three regular enemies play alike.** Slime, mushroom and skeleton all close distance and touch you. The
-  bat's flight pattern is the only real variation before the boss.
+- **Regular enemies are readable but not deep.** Each archetype moves differently and at most two commit to
+  an attack at once, but none of them has a second attack; variety before the boss comes from placement.
 - **The Keeper's charge is the hardest attack to read** at 4× zoom on a small window, because the telegraph
   rectangle can start off screen. It is fair at 5× and above.
+
+## Release candidate additions
+
+- **Controls.** Title and pause both open the same Options, Controls, Save Data and Credits pages. Rebinding
+  refuses a key another action owns and always leaves Escape and Enter working; the menus were driven through
+  all of this by the release tests, including a reload with a rebound key.
+- **Save management.** Save & Quit writes before it leaves; export downloads `emberfall-save.json`; import
+  validates every field before the confirmation appears, and a broken file leaves the slot untouched.
+- **Ending.** The card shows level, coins and time and offers Continue Exploring or Return to Title, which
+  saves the restored world first.
+- **Mimi's charm.** The side quest now pays 30 XP, 15 coins and a Life Potion; the charm itself stays with the
+  player, which is what Mimi says.
+- **Heavy Blade.** 80 coins in the shop, so a thorough player can afford it before the shrine instead of
+  finding it priced out of reach; the keepers' vault still gives one away.
 
 ## Difficulty
 
 Starting at 6 HP with a 2-damage katana, the woods are forgiving; the shrine's skeletons punish standing
 still. The Guardian's Charm from the shrine entrance takes the player to 8 HP before the boss, and the boss
-does 2 per hit with a real punish window after each attack. A careful player wins first try; a careless one
+does 1 per hit with a real punish window after each attack, and 140 health means the fight is won in those
+windows, not by trading. A careful player wins first try; a careless one
 dies once and retries from the shrine entrance with the seal and braziers already handled.
 
 ## Settings that matter

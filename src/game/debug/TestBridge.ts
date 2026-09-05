@@ -78,6 +78,8 @@ export function installTestBridge(game: Phaser.Game): void {
         knockback: 0,
         hitstop: 0,
         faction: 'player',
+        // Lets the helper ignore the boss's intro invulnerability and wind-up guard; real hitboxes never carry it.
+        tags: ['dev'],
       });
     },
     damagePlayer: (amount = 999) => {

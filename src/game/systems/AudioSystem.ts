@@ -22,11 +22,18 @@ const FADE_IN_MS = 620;
 export class AudioSystem {
   private currentMusic: Phaser.Sound.BaseSound | null = null;
   private currentId: MusicId | null = null;
+  private readonly unsubscribeSettings: () => void;
 
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly settings: AudioSettings = { masterVolume: 1, musicVolume: 0.75, sfxVolume: 0.85, muted: false },
-  ) {}
+  ) {
+    this.unsubscribeSettings = SettingsStore.onChange((settings) => {
+      this.settings.musicVolume = settings.musicVolume;
+      this.settings.sfxVolume = settings.sfxVolume;
+      this.updateCurrentMusicVolume();
+    });
+  }
 
   playMusic(id: MusicId, options: { fadeInMs?: number; fadeOutMs?: number } = {}): void {
     const key = musicKey(id);
@@ -64,6 +71,11 @@ export class AudioSystem {
     if (this.currentMusic) this.fadeOutAndStop(this.currentMusic, fadeMs);
     this.currentMusic = null;
     this.currentId = null;
+  }
+
+  destroy(): void {
+    this.unsubscribeSettings();
+    this.stopMusic(0);
   }
 
   /**
@@ -108,11 +120,17 @@ export class AudioSystem {
   setMuted(muted: boolean): void {
     this.settings.muted = muted;
     this.scene.sound.mute = muted;
+    this.updateCurrentMusicVolume();
+  }
+
+  private updateCurrentMusicVolume(): void {
+    if (!this.currentMusic?.isPlaying) return;
+    (this.currentMusic as unknown as { volume: number }).volume = this.volume(this.settings.musicVolume);
   }
 
   private volume(channelVolume: number): number {
     if (this.settings.muted) return 0;
-    const master = SettingsStore.get().masterVolume;
-    return Math.max(0, Math.min(1, master * this.settings.masterVolume * channelVolume));
+    // The shared sound manager applies master volume once to every channel.
+    return Math.max(0, Math.min(1, this.settings.masterVolume * channelVolume));
   }
 }

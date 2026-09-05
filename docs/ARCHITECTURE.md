@@ -10,7 +10,8 @@ Phaser 4.2.1 + TypeScript 5.9 (strict) + Vite 8. Single-player, offline, static 
 | **Persistent save state** | `SaveGame` object (versioned), stored in IndexedDB via `SaveSystem` | player HP/level/xp/position/map, inventory, equipment, quest states, world flags, opened chests, defeated bosses, playtime |
 | **Session state** | singleton session in `core/session.ts`, created on New Game / Continue | the live `SaveGame` being played |
 | **Scene state** | scene instances | sprites, bodies, tweens, timers — rebuilt from data on every map load |
-| **Settings** | `localStorage` | volumes, screen shake, display mode and hints |
+| **Settings** | `localStorage` | volumes, screen shake, display mode, hints and fullscreen preference |
+| **Input bindings** | `localStorage` | keyboard bindings for the eleven player/menu actions |
 
 Persistent truth lives in the session save. Scene objects are rebuilt on every map load.
 
@@ -19,9 +20,9 @@ Persistent truth lives in the session save. Scene objects are rebuilt on every m
 ```
 BootScene      → minimal config, keyboard capture, load boot pack (font, logo, panel)
 PreloadScene   → core bundle (player, UI, common SFX) + progress bar + audio unlock hint
-MainMenuScene  → New Game / Continue / Settings, plus asset attribution
+MainMenuScene  → New Game / Continue / Options / Controls / Credits, plus save metadata and title vignette
 WorldScene     → loads a map bundle by mapId, builds tilemap + entities from Tiled objects, runs gameplay; map changes = fade out → `scene.restart({ mapId, spawnId })` (Phaser tears down every layer/body/tween for us; session state lives outside the scene)
-UIScene        → parallel overlay: HUD, dialogue box, inventory, quest log, pause/settings, toasts, hints
+UIScene        → parallel overlay: HUD, dialogue box, inventory, quest log, shared pause/options/controls/save menu, toasts, hints
 ```
 
 The boot and preload scenes load the shared asset set. `WorldScene` rebuilds the selected generated map and its entities on each transition.
@@ -34,7 +35,7 @@ src/
   game/
     config/                    gameConfig.ts, constants.ts (resolution, depths, timings), assetKeys.ts
     core/                      session.ts, typed events and RNG helpers
-    input/                     InputActions.ts (action mapping, keyboard + gamepad → actions)
+    input/                     InputActions.ts and InputBindingStore.ts (keyboard rebinding + gamepad → actions)
     scenes/                    Boot, Preload, MainMenu, World, UI
     entities/
       player/                  Player.ts and PlayerCombat.ts
@@ -44,7 +45,7 @@ src/
     systems/                   display, interaction, quests, inventory, progression, audio, save, settings and map transitions
     world/                     map loader, registry and map types
     data/                      items, weapons, enemies, quests, dialogue, loot, maps and strings
-    ui/                        reusable nine-slice panel widget
+    ui/                        reusable panels, release menu and title vignette
     vfx/                       Effects.ts (slash, spark, smoke, pickup, level-up, death)
     debug/                     DebugOverlay.ts (?debug=1), TestBridge.ts (DEV only, window.__GAME_TEST__)
     types/                     shared TS types & branded IDs
@@ -66,6 +67,9 @@ docs/                          this folder
 - **Maps**: `MapLoader` reads generated Tiled JSON, creates layers and collision, and exposes object layers to `WorldScene` factories. Adding a map means adding a typed builder definition, registry entry and runtime assets.
 - **Data-driven**: new enemy = data entry + (optional) behaviour file; new item/quest/NPC/dialogue = data only.
 - **Save**: `SaveGame` has a version and is migrated on load. Serialized writes prevent older autosaves from overtaking transition or ending saves. IndexedDB persistence is requested after the first save.
+- **Input bindings**: `InputBindingStore` owns the persisted keyboard map for movement, attack, roll,
+  interact, throw, inventory, quest log and pause. `InputActions` rebuilds its keyboard listeners when that map
+  changes and still maps controller buttons to the same actions.
 - **Debug/Test bridge**: `import.meta.env.DEV` gates `window.__GAME_TEST__` (read-only state getters + a few deterministic helpers) and the `?debug=1` overlay. Tree-shaken out of production.
 
 ## Display

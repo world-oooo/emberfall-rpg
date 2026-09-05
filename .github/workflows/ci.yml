@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 18 * * *'
+
+jobs:
+  build-and-production-smoke:
+    name: Check, build, Chromium E2E and production smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - run: npm run test:production
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-smoke-artifacts
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+
+  browser-matrix:
+    name: Browser matrix
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit firefox
+      - run: npm run build
+      - run: npm run test:matrix
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-matrix-artifacts
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore

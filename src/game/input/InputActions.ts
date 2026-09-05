@@ -1,4 +1,15 @@
 import Phaser from 'phaser';
+import {
+  BINDABLE_ACTIONS,
+  DEFAULT_BINDINGS,
+  inputBindingStore,
+  type ActiveInputDevice,
+  type ActiveDeviceListener,
+  type BindableAction,
+  type BindResult,
+  type BindingListener,
+  type InputBindingStore,
+} from './InputBindingStore';
 
 export type Action =
   | 'attack'
@@ -16,32 +27,63 @@ export type Action =
   | 'menuRight';
 
 type Dir = 'up' | 'down' | 'left' | 'right';
+type KeyName = Action | Dir;
 
 const K = Phaser.Input.Keyboard.KeyCodes;
 
-/** Keyboard bindings. Several keys per action so both WASD/JK and Arrows/ZX layouts feel native. */
-const KEY_BINDINGS: Record<Action | Dir, number[]> = {
-  up: [K.UP, K.W],
-  down: [K.DOWN, K.S],
-  left: [K.LEFT, K.A],
-  right: [K.RIGHT, K.D],
-  attack: [K.J, K.Z, K.SPACE],
-  roll: [K.K, K.X, K.SHIFT],
-  interact: [K.E, K.ENTER],
-  throw: [K.L, K.C],
-  inventory: [K.I, K.TAB],
-  quests: [K.Q],
-  pause: [K.ESC, K.P],
-  confirm: [K.ENTER, K.SPACE, K.E, K.J, K.Z],
-  cancel: [K.ESC, K.X, K.K, K.BACKSPACE],
-  menuUp: [K.UP, K.W],
-  menuDown: [K.DOWN, K.S],
-  menuLeft: [K.LEFT, K.A],
-  menuRight: [K.RIGHT, K.D],
+
+const CODE_TO_KEYCODE: Readonly<Record<string, number>> = {
+  ArrowUp: K.UP,
+  ArrowDown: K.DOWN,
+  ArrowLeft: K.LEFT,
+  ArrowRight: K.RIGHT,
+  Backspace: K.BACKSPACE,
+  Enter: K.ENTER,
+  Escape: K.ESC,
+  Space: K.SPACE,
+  Tab: K.TAB,
+  ShiftLeft: K.SHIFT,
+  ShiftRight: K.SHIFT,
+  KeyA: K.A,
+  KeyB: K.B,
+  KeyC: K.C,
+  KeyD: K.D,
+  KeyE: K.E,
+  KeyF: K.F,
+  KeyG: K.G,
+  KeyH: K.H,
+  KeyI: K.I,
+  KeyJ: K.J,
+  KeyK: K.K,
+  KeyL: K.L,
+  KeyM: K.M,
+  KeyN: K.N,
+  KeyO: K.O,
+  KeyP: K.P,
+  KeyQ: K.Q,
+  KeyR: K.R,
+  KeyS: K.S,
+  KeyT: K.T,
+  KeyU: K.U,
+  KeyV: K.V,
+  KeyW: K.W,
+  KeyX: K.X,
+  KeyY: K.Y,
+  KeyZ: K.Z,
+  Digit0: K.ZERO,
+  Digit1: K.ONE,
+  Digit2: K.TWO,
+  Digit3: K.THREE,
+  Digit4: K.FOUR,
+  Digit5: K.FIVE,
+  Digit6: K.SIX,
+  Digit7: K.SEVEN,
+  Digit8: K.EIGHT,
+  Digit9: K.NINE,
 };
 
 /** Keys Phaser must swallow so the browser never scrolls or tabs away. */
-export const CAPTURED_KEYS: number[] = Array.from(new Set(Object.values(KEY_BINDINGS).flat()));
+export const CAPTURED_KEYS: number[] = capturedKeyCodesFromBindings(DEFAULT_BINDINGS);
 
 /**
  * Per-scene action mapper: keyboard + gamepad (pad1) → named actions and a movement axis.
@@ -53,34 +95,61 @@ export class InputActions {
   readonly lastDir = new Phaser.Math.Vector2(0, 1);
 
   private readonly keys: Record<Action | Dir, Phaser.Input.Keyboard.Key[]>;
+  private readonly keyDownHandlers = new Map<Phaser.Input.Keyboard.Key, Array<() => void>>();
   private readonly heldNow = new Set<Action>();
   private readonly heldPrev = new Set<Action>();
   private readonly buffered = new Map<Action, number>();
   private padDir: Record<Dir, boolean> = { up: false, down: false, left: false, right: false };
   private enabled = true;
+  private readonly unsubscribeBindings: () => void;
+  private readonly onWindowBlur = (): void => this.clearTransientInput();
   /** key names that received a DOM keydown since the last update (catches presses shorter than a frame) */
   private readonly latched = new Set<Action | Dir>();
 
-  constructor(private readonly scene: Phaser.Scene) {
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly bindingStore: InputBindingStore = inputBindingStore,
+  ) {
     const kb = scene.input.keyboard;
     if (!kb) throw new Error('Keyboard plugin missing');
     this.keys = {} as Record<Action | Dir, Phaser.Input.Keyboard.Key[]>;
-    for (const [name, codes] of Object.entries(KEY_BINDINGS) as [Action | Dir, number[]][]) {
-      this.keys[name] = codes.map((c) => kb.addKey(c, false));
-      for (const k of this.keys[name]) k.on(Phaser.Input.Keyboard.Events.DOWN, () => this.latched.add(name));
-    }
+    this.rebuildKeys();
+    this.unsubscribeBindings = this.bindingStore.onChange(() => this.rebuildKeys());
+    window.addEventListener('blur', this.onWindowBlur);
   }
 
   /** Disable while a modal (dialogue/menu) owns input; movement axis becomes zero and nothing is "pressed". */
   setEnabled(v: boolean): void {
     this.enabled = v;
-    if (!v) {
-      this.axis.set(0, 0);
-      this.heldNow.clear();
-      this.heldPrev.clear();
-      this.buffered.clear();
-      this.latched.clear();
-    }
+    if (!v) this.clearTransientInput();
+  }
+
+  bind(action: BindableAction, code: string): BindResult {
+    return this.bindingStore.bind(action, code);
+  }
+
+  bindings(): Record<BindableAction, string[]> {
+    return this.bindingStore.getBindings();
+  }
+
+  resetBindings(): Record<BindableAction, string[]> {
+    return this.bindingStore.reset();
+  }
+
+  onBindingsChange(listener: BindingListener): () => void {
+    return this.bindingStore.onChange(listener);
+  }
+
+  onActiveDeviceChange(listener: ActiveDeviceListener): () => void {
+    return this.bindingStore.onActiveDeviceChange(listener);
+  }
+
+  prompt(action: BindableAction): string {
+    return this.bindingStore.prompt(action);
+  }
+
+  getActiveDevice(): ActiveInputDevice {
+    return this.bindingStore.getActiveDevice();
   }
 
   update(time: number): void {
@@ -110,7 +179,7 @@ export class InputActions {
       if (pad.right) ax = 1;
       if (pad.A) this.heldNow.add('attack').add('confirm');
       if (pad.B) this.heldNow.add('roll').add('cancel');
-      if (pad.X) this.heldNow.add('interact');
+      if (pad.X) this.heldNow.add('interact').add('confirm');
       if (pad.Y) this.heldNow.add('throw');
       if (pad.isButtonDown(9)) this.heldNow.add('pause');
       if (pad.isButtonDown(8)) this.heldNow.add('inventory');
@@ -119,6 +188,7 @@ export class InputActions {
       if (this.padDir.down) this.heldNow.add('menuDown');
       if (this.padDir.left) this.heldNow.add('menuLeft');
       if (this.padDir.right) this.heldNow.add('menuRight');
+      if (ax !== 0 || ay !== 0 || this.heldNow.size > 0) this.bindingStore.setActiveDevice('gamepad');
     }
 
     const kx = (this.anyDown('right') ? 1 : 0) - (this.anyDown('left') ? 1 : 0);
@@ -164,6 +234,51 @@ export class InputActions {
     else this.buffered.clear();
   }
 
+  private rebuildKeys(): void {
+    const kb = this.scene.input.keyboard;
+    if (!kb) return;
+    this.releaseKeys();
+
+    const bindings = this.bindingStore.getBindings();
+    const keyCodes = keyCodeBindings(bindings);
+    kb.addCapture(capturedKeyCodesFromBindings(bindings));
+    for (const name of KEY_NAMES) {
+      const codes = keyCodes[name] ?? [];
+      this.keys[name] = codes.map((code) => kb.addKey(code, false));
+      for (const key of this.keys[name]) {
+        const handler = (): void => {
+          this.bindingStore.setActiveDevice('keyboard');
+          this.latched.add(name);
+        };
+        key.on(Phaser.Input.Keyboard.Events.DOWN, handler);
+        const handlers = this.keyDownHandlers.get(key) ?? [];
+        handlers.push(handler);
+        this.keyDownHandlers.set(key, handlers);
+      }
+    }
+    this.clearTransientInput();
+  }
+
+  private releaseKeys(): void {
+    const kb = this.scene.input.keyboard;
+    if (!kb) return;
+    for (const list of Object.values(this.keys)) {
+      for (const key of list) {
+        for (const handler of this.keyDownHandlers.get(key) ?? []) key.off(Phaser.Input.Keyboard.Events.DOWN, handler);
+        kb.removeKey(key, false, false);
+        this.keyDownHandlers.delete(key);
+      }
+    }
+  }
+
+  private clearTransientInput(): void {
+    this.axis.set(0, 0);
+    this.heldNow.clear();
+    this.heldPrev.clear();
+    this.buffered.clear();
+    this.latched.clear();
+  }
+
   private anyDown(name: Action | Dir): boolean {
     const list = this.keys[name];
     for (const k of list) if (k.isDown) return true;
@@ -171,18 +286,14 @@ export class InputActions {
   }
 
   destroy(): void {
-    const kb = this.scene.input.keyboard;
-    if (!kb) return;
-    for (const list of Object.values(this.keys)) {
-      for (const k of list) {
-        k.removeAllListeners();
-        kb.removeKey(k, false, false);
-      }
-    }
+    window.removeEventListener('blur', this.onWindowBlur);
+    this.unsubscribeBindings();
+    this.releaseKeys();
+    this.clearTransientInput();
   }
 }
 
-const ACTIONS: Action[] = [
+const ACTIONS: readonly Action[] = [
   'attack',
   'roll',
   'interact',
@@ -197,3 +308,52 @@ const ACTIONS: Action[] = [
   'menuLeft',
   'menuRight',
 ];
+
+const KEY_NAMES: readonly KeyName[] = [
+  'up',
+  'down',
+  'left',
+  'right',
+  ...ACTIONS,
+];
+
+function keyCodeBindings(bindings: Readonly<Record<BindableAction, readonly string[]>>): Record<KeyName, number[]> {
+  const directions: Record<Dir, number[]> = {
+    up: codesToKeyCodes(bindings.moveUp),
+    down: codesToKeyCodes(bindings.moveDown),
+    left: codesToKeyCodes(bindings.moveLeft),
+    right: codesToKeyCodes(bindings.moveRight),
+  };
+
+  const actions: Record<Action, number[]> = {
+    attack: codesToKeyCodes(bindings.attack),
+    roll: codesToKeyCodes(bindings.roll),
+    interact: codesToKeyCodes(bindings.interact),
+    throw: codesToKeyCodes(bindings.throw),
+    inventory: codesToKeyCodes(bindings.inventory),
+    quests: codesToKeyCodes(bindings.quests),
+    pause: uniqueCodes([...codesToKeyCodes(bindings.pause), K.ESC]),
+    // Enter always confirms and Escape always cancels, so no rebinding can leave a player unable to work a menu.
+    confirm: uniqueCodes([...codesToKeyCodes(bindings.interact), ...codesToKeyCodes(bindings.attack), K.ENTER]),
+    cancel: uniqueCodes([...codesToKeyCodes(bindings.roll), K.BACKSPACE, K.ESC]),
+    menuUp: directions.up,
+    menuDown: directions.down,
+    menuLeft: directions.left,
+    menuRight: directions.right,
+  };
+
+  return { ...directions, ...actions };
+}
+
+function codesToKeyCodes(codes: readonly string[]): number[] {
+  return uniqueCodes(codes.map((code) => CODE_TO_KEYCODE[code]).filter((code): code is number => typeof code === 'number'));
+}
+
+function capturedKeyCodesFromBindings(bindings: Readonly<Record<BindableAction, readonly string[]>>): number[] {
+  const codes = BINDABLE_ACTIONS.flatMap((action) => bindings[action]);
+  return uniqueCodes([...codesToKeyCodes(codes), K.ESC, K.BACKSPACE, K.ENTER]);
+}
+
+function uniqueCodes(codes: readonly number[]): number[] {
+  return Array.from(new Set(codes));
+}

@@ -66,7 +66,7 @@ export const ITEMS = define({
   },
   shuriken: {
     name: 'Shuriken',
-    description: 'Throw with L. Hits from afar.',
+    description: 'A throwing star. Hits from afar.',
     category: 'consumable',
     icon: 'shuriken',
     maxStack: 20,

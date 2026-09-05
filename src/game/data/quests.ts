@@ -49,11 +49,11 @@ export const QUESTS = define({
   },
   quest_sleeping_guardian: {
     title: 'The Sleeping Guardian',
-    summary: 'Recover the Ember from the corrupted Tanuki Guardian.',
+    summary: 'Recover the Ember from the Mask Keeper, the corrupted Tanuki Guardian.',
     autoStartAfterRewarded: 'quest_dimmed_shrine',
     objectives: [
       { id: 'find_key', label: 'Find the shrine key', kind: 'collectItem', targetId: 'shrine_key', count: 1 },
-      { id: 'defeat_guardian', label: 'Defeat the Tanuki Guardian', kind: 'defeatEnemy', targetId: 'boss_racoon', count: 1 },
+      { id: 'defeat_guardian', label: 'Defeat the Mask Keeper', kind: 'defeatEnemy', targetId: 'boss_racoon', count: 1 },
       { id: 'take_ember', label: 'Take the Ember', kind: 'collectItem', targetId: 'ember', count: 1 },
       { id: 'return_hana', label: 'Return to Elder Hana', kind: 'talkToNpc', targetId: 'elder_hana', count: 1 },
       { id: 'relight_shrine', label: 'Relight the village shrine', kind: 'interactObject', targetId: 'shrine_ember', count: 1 },
@@ -73,7 +73,9 @@ export const QUESTS = define({
       { id: 'find_charm', label: 'Find the charm in the secret grove', kind: 'collectItem', targetId: 'fox_charm', count: 1 },
       { id: 'return_mimi', label: 'Return to Mimi', kind: 'talkToNpc', targetId: 'child_mimi', count: 1 },
     ],
-    rewards: { xp: 30, items: [{ itemId: 'fox_charm', quantity: 1 }] },
+    // The charm itself is found in the grove and stays with the player; handing it back as the "reward" was a
+    // no-op against a one-per-stack accessory. Mimi gives something the road ahead can use instead.
+    rewards: { xp: 30, coins: 15, items: [{ itemId: 'life_potion', quantity: 1 }] },
   },
 });
 

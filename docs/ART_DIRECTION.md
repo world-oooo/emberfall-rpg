@@ -8,8 +8,8 @@ consistency gate (tile size, perspective, palette, outline, animation style, UI)
 | Topic | Decision |
 |---|---|
 | Tile size | 16×16 |
-| Internal resolution | 480×270 (30×16.9 tiles visible). Chosen over 320×180 (too zoomed, HUD cramped) and 640×360 (16 px sprites read as tiny at 3× on 1080p). |
-| Scaling | `pixelArt: true`, `Scale.FIT` + `CENTER_BOTH` + `zoom: MAX_ZOOM` (largest integer that fits). 1080p → 4×. Letterbox shows the shell vignette. |
+| Internal view | Adaptive. The default fills the browser window and chooses an integer camera zoom for roughly 300–440×168–240 world pixels. Fixed-view mode frames exactly 400×225 world pixels for identical composition across machines. |
+| Scaling | `pixelArt: true`, `Scale.RESIZE`, nearest-neighbor rendering and integer camera zoom. The canvas fills the window in default mode; fixed-view mode letterboxes around the constant 400×225 view. |
 | Filtering | nearest-neighbor only; no `smoothPixelArt`; canvas gets `image-rendering: pixelated` |
 | Camera | Custom follow in `update`: exponential smoothing with delta-time, scroll rounded to integers, bounded to the map. No fractional camera zoom, ever. Shake: short (80–140 ms), intensity 0.004–0.01, toggle in settings. |
 | Player scale | 1× (16 px body in a 32 px animation frame). Enemies 1×, boss 1× (60 px). Nothing is scaled non-integer. |
@@ -26,3 +26,6 @@ consistency gate (tile size, perspective, palette, outline, animation style, UI)
 ## Screens must look like one game
 
 Main menu, village, combat, dialogue, inventory, shrine interior, boss: same palette, same font, same panel style, same 16 px scale.
+
+The RC title screen reuses the Ninja Adventure tilesheets at their packed one-pixel margin/two-pixel spacing,
+building the mountain village vignette from the same CC0 tile family used by the runtime maps.

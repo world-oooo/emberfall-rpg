@@ -27,7 +27,7 @@ one boss, and a single optional puzzle.
 | Hit Feedback | 3 | 4 | Owned hitstop controller instead of an inverted timeScale |
 | Enemy Readability | **2** | 4 | Shaped telegraphs per attack kind, and at most two attackers at once |
 | Enemy Variety | 3 | 4 | Hop, kite-and-burst, swoop-and-peel, commit-and-lunge |
-| Boss Design | **1** | 4 | Own controller, three attacks, two phases, arena sequence |
+| Boss Design | **1** | 4 | Own controller, three attacks, two phases, arena sequence; rebalanced after a measured 4.4 s mash kill |
 | HUD | **1** | 4 | Rounded plates, hearts, level, coins, objective, boss bar |
 | Dialogue UI | 2 | 4 | Portrait frame, typewriter, box sized from its longest line |
 | Inventory UI | 2 | 4 | Five-column icon grid |
@@ -41,7 +41,7 @@ one boss, and a single optional puzzle.
 | Loading | 4 | 4 | Cold 1.4–1.5 s, warm 0.4–0.8 s, cache warmed through doors |
 | Performance | **5** | **5** | 60 fps, p99 ≤ 17.8 ms in every scene including the boss |
 | Save UX | 4 | 4 | Autosave, Continue, world flags persist |
-| Accessibility | 3 | 4 | Shake, volume, hints, display mode; still no rebinding |
+| Accessibility | 3 | 4 | Shake, volume, hints, display mode, keyboard rebinding, gamepad prompts |
 | Browser Robustness | 4 | 5 | No console errors across the suite, resize handled live |
 | Overall Polish | 2 | 4 | Reads as a small finished game rather than a prototype |
 
@@ -82,10 +82,17 @@ Every surface is laid out from `Display.width/height` and re-anchors on resize. 
 rooms carved from solid rock. The village shrine — the emotional centre of the story — was an invisible
 collision tile on bare dirt and is now an actual building, which the ending lights.
 
+### RC shell
+
+The release-candidate pass adds a polished title vignette, Continue metadata, New Game warning, shared
+pause/options/controls/save menus, eleven-action keyboard rebinding, Save & Quit, validated save
+import/export, fullscreen toggle and credits.
+
 ### P2 — QA
 
-Fifteen end-to-end tests, sixteen unit tests, map validation, a scripted screenshot baseline and a scripted
-measurement pass. See [TESTING.md](TESTING.md).
+Twenty-two end-to-end tests, 35 unit tests, map validation, a production-preview smoke, a three-engine
+completion matrix, a scripted screenshot baseline, a scripted measurement pass and a boss fight measured with
+real attacks. See [TESTING.md](TESTING.md) and [RELEASE_AUDIT.md](RELEASE_AUDIT.md).
 
 ## Measured data
 
@@ -122,6 +129,10 @@ Recorded because each was invisible from reading the code alone:
 8. Opening a seal stripped the tile from every layer including Ground, punching a black hole in the floor.
 9. The quest tracker's text overflowed its rounded plate and its plate ignored wrapped objective lines.
 10. The boss health bar overlapped the heart plate at 320 logical pixels wide.
+11. Every door softlocked in Firefox: saves awaited `navigator.storage.persist()`, whose promise does not settle
+    while Firefox's permission prompt is open, and transitions wait on the save queue.
+12. New Game silently dropped an Enter press that arrived before the save slot had been read.
+13. A bot that mashed attack killed the boss in 4.4 s; its intro was a free opening and nothing punished trading.
 
 ## Comparison references
 
@@ -136,5 +147,4 @@ Recorded because each was invisible from reading the code alone:
 ## What is still weak
 
 - **Content volume.** Three maps and one boss. That is the deliberate scope, but it caps the ceiling.
-- **No input rebinding.** Keyboard layouts are generous but fixed.
 - **One puzzle.** The brazier vault is the only non-combat problem in the game.

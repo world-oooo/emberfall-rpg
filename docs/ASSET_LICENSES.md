@@ -11,7 +11,8 @@ the asset is not used.
 
 ## Ninja Adventure - Asset Pack
 
-- **Asset Name:** Ninja Adventure - Asset Pack (characters, monsters, bosses, tilesets, items, FX, UI, fonts, music, SFX)
+- **Asset Name:** Ninja Adventure - Asset Pack (characters, monsters, bosses, tilesets, title vignette tiles,
+  items, FX, UI, fonts, music, SFX)
 - **Creator:** Pixel-Boy and AAA
 - **Original Source:** https://pixel-boy.itch.io/ninja-adventure-asset-pack (file: `Ninja Adventure - Asset Pack.zip`, 89 MB, 2,674 files)
 - **Local Path:** raw pack in `vendor/ninja-adventure/` (ignored); curated copies under `public/assets/**`
@@ -27,7 +28,9 @@ the asset is not used.
 - **Date Verified:** 2026-09-04 (fetched the itch.io page and the pack's own LICENSE.txt)
 - **Notes:** Audio in the pack is WAV/OGG; SFX are transcoded to OGG (and MP3 fallback) for the web.
   Music files are used as-is (OGG). Font `NormalFont.ttf` and bitmap fonts `font8x8.png` / `font24x30.png`
-  are part of the same CC0 pack.
+  are part of the same CC0 pack. The RC title vignette is assembled from committed `TilesetNature.png`,
+  `TilesetHouse.png`, character, UI and VFX assets from this same curated family; no separate title-art pack
+  is used.
 
 ---
 

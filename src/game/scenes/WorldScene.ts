@@ -5,7 +5,7 @@ import { Depth, Feel } from '../config/constants';
 import { CameraFollow } from '../core/CameraFollow';
 import { Display } from '../systems/DisplaySystem';
 import { gameEvents } from '../core/events';
-import { getSession, type GameSession, type InventoryEntry } from '../core/session';
+import { endSession, getSession, type GameSession, type InventoryEntry } from '../core/session';
 import { getDialogue, hasDialogue, type DialogueNode, type DialogueOption } from '../data/dialogue';
 import { getEnemy } from '../data/enemies';
 import { getItem } from '../data/items';
@@ -65,7 +65,7 @@ export class WorldScene extends Phaser.Scene {
   private bossMusicActive = false;
   private shrineLit = false;
   private readonly saveSystem = new SaveSystem();
-  private saveQueue: Promise<void> = Promise.resolve();
+  private saveQueue: Promise<boolean> = Promise.resolve(true);
   private readonly unsubscribers: Array<() => void> = [];
 
   constructor() {
@@ -254,13 +254,13 @@ export class WorldScene extends Phaser.Scene {
     if (SettingsStore.get().showHints) this.ui?.showToast(text);
   }
 
-  async autosave(): Promise<void> {
+  async autosave(): Promise<boolean> {
     this.syncSaveFromPlayer();
     this.session.accumulatePlaytime();
-    await this.queueSave('autosave');
+    return this.queueSave('autosave');
   }
 
-  async saveForTransition(mapId: string, spawnId: string): Promise<void> {
+  async saveForTransition(mapId: string, spawnId: string): Promise<boolean> {
     this.session.accumulatePlaytime();
     this.session.save.player.mapId = mapId;
     this.session.save.player.spawnId = spawnId;
@@ -268,7 +268,17 @@ export class WorldScene extends Phaser.Scene {
     this.session.save.player.hp = this.player.health.current;
     delete this.session.save.player.x;
     delete this.session.save.player.y;
-    await this.queueSave('transition');
+    return this.queueSave('transition');
+  }
+
+  async saveCurrent(): Promise<boolean> {
+    this.syncSaveFromPlayer();
+    this.session.accumulatePlaytime();
+    return this.queueSave('manual');
+  }
+
+  endSession(): void {
+    endSession();
   }
 
   override update(time: number, delta: number): void {
@@ -325,7 +335,7 @@ export class WorldScene extends Phaser.Scene {
     const idByNpc: Record<string, string> = {
       elder_hana: this.quests.getProgress('quest_sleeping_guardian').status === 'active' ? 'elder_hana_guardian' : 'elder_hana_start',
       master_ryo: 'master_ryo_hint',
-      child_mimi: 'child_mimi_start',
+      child_mimi: this.quests.getProgress('quest_lost_charm').status === 'rewarded' ? 'child_mimi_rewarded' : 'child_mimi_start',
       merchant_botan: 'merchant_botan_shop',
       guard_goro: 'guard_goro_gate',
       hermit_sen: 'hermit_sen_hint',
@@ -355,7 +365,7 @@ export class WorldScene extends Phaser.Scene {
     }
     if (id === 'ember_pedestal') {
       if (!this.session.save.defeatedBosses.includes('boss_racoon')) {
-        this.ui?.showToast('The corrupted Guardian still watches the Ember.');
+        this.ui?.showToast('The Mask Keeper still watches the Ember.');
         return;
       }
       if (!this.inventory.has('ember')) {
@@ -384,11 +394,10 @@ export class WorldScene extends Phaser.Scene {
     if (kind === 'savepoint') {
       this.player.health.heal(this.player.health.max);
       this.session.save.player.hp = this.player.health.current;
-      void this.autosave();
-      this.ui?.showToast('Rested and saved.');
+      void this.autosave().then(ok => this.ui?.showToast(ok ? 'Rested and saved.' : 'Rested. Save failed; try again.'));
       return;
     }
-    if (kind === 'dummy') this.ui?.showToast('J attacks. Chain three cuts; K rolls through danger.');
+    if (kind === 'dummy') this.ui?.showToast(`${SettingsStore.keyLabel('attack')} attacks. Chain three cuts; ${SettingsStore.keyLabel('roll')} rolls through danger.`);
     else this.showObjectDialogue(kind === 'sign' ? 'Sign' : 'Old Shrine', text);
   }
 
@@ -584,14 +593,16 @@ export class WorldScene extends Phaser.Scene {
     gameEvents.emit('playerHealthChanged', { hp: this.player.health.current, maxHp: this.player.health.max });
   }
 
-  private queueSave(reason: 'autosave' | 'transition'): Promise<void> {
-    this.saveQueue = this.saveQueue.catch(() => undefined).then(async () => {
+  private queueSave(reason: 'autosave' | 'transition' | 'manual'): Promise<boolean> {
+    this.saveQueue = this.saveQueue.catch(() => false).then(async () => {
       try {
         const persisted = await this.saveSystem.save(this.session.save);
         this.session.save.savedAt = persisted.savedAt;
+        return true;
       } catch (error) {
         console.error(`[SaveSystem] ${reason} save failed`, error);
         if (reason === 'autosave') this.ui?.showToast('Autosave unavailable in this browser.');
+        return false;
       }
     });
     return this.saveQueue;
@@ -922,7 +933,7 @@ export class WorldScene extends Phaser.Scene {
     this.transitions.destroy();
     this.interactions.destroy();
     this.combat.destroy();
-    this.audio.stopMusic();
+    this.audio.destroy();
     this.npcs.length = 0;
     this.inputActions.destroy();
     this.debug?.destroy();

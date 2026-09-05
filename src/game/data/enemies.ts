@@ -86,9 +86,12 @@ export const ENEMIES: Record<string, EnemyDefinition> = {
   boss_racoon: {
     id: 'boss_racoon',
     name: 'Mask Keeper',
-    // Health is sized for a 90-150 second fight against a player who reads the telegraphs; BossEnemy owns
+    // Health is sized for a 90-150 second fight against a player who lands a chain in each recovery window
+    // (about 7 damage every 3 s) and dodges the rest. Measured with a bot that only mashes and is healed
+    // constantly: 42 HP fell in 4.4 s, 84 in 9.5 s even with BossEnemy's intro, guard and counter rules;
+    // a real player who trades like that eats a swipe every cycle and does not survive 140. BossEnemy owns
     // the attack timings, so the values below are only used for movement speed and the reward.
-    hp: 42,
+    hp: 140,
     speed: 58,
     body: { width: 22, height: 14, offsetX: 19, offsetY: 40 },
     aggroRange: 200,

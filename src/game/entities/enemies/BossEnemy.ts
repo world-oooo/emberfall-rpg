@@ -42,6 +42,8 @@ export class BossEnemy extends BaseEnemy {
   private comboFollowUp: BossState | null = null;
   private dashElapsed = 0;
   private awake = false;
+  /** Cuts taken while repositioning; three in a row and the Keeper answers instead of drifting. */
+  private hitsWhileIdle = 0;
 
   constructor(scene: Phaser.Scene, def: EnemyDefinition, spawnId: string, x: number, y: number, world: BossWorld) {
     super(scene, def, spawnId, x, y);
@@ -90,7 +92,10 @@ export class BossEnemy extends BaseEnemy {
       })
       // Reposition between attacks. Always leaves a beat where the player can close in and hit back.
       .add('idle', {
-        enter: (b) => b.playBossAnim('idle'),
+        enter: (b) => {
+          b.hitsWhileIdle = 0;
+          b.playBossAnim('idle');
+        },
         update: (b, delta) => {
           const target = b.target;
           if (!target) return;
@@ -103,7 +108,8 @@ export class BossEnemy extends BaseEnemy {
           else b.body.velocity.set(0, 0);
           b.faceTarget(target);
           void delta;
-          const wait = b.phase === 2 ? 620 : 900;
+          // A player standing in swipe range gets answered twice as fast: hugging the boss is not free.
+          const wait = (b.phase === 2 ? 620 : 900) * (distance <= SWIPE_RANGE ? 0.5 : 1);
           if (b.fsm.elapsed >= wait) b.chooseAttack(distance);
         },
         exit: (b) => b.body.velocity.set(0, 0),
@@ -359,7 +365,16 @@ export class BossEnemy extends BaseEnemy {
 
   override takeHit(info: DamageInfo): boolean {
     if (info.faction === 'enemy' || this.health.isDead) return false;
-    const result = this.health.applyDamage(info, this.scene.time.now, 120);
+    // The DEV bridge's damage helper carries a 'dev' tag so tests keep a deterministic kill; real hitboxes never do.
+    const dev = info.tags?.includes('dev') ?? false;
+    // The intro is a presentation beat, not a free opening. Measured before this rule: a bot that walked in
+    // and mashed dealt a quarter of the boss's health during the roar.
+    if (!dev && (this.fsm.is('sleep') || this.fsm.is('wake'))) return false;
+    // Trading into a wind-up or a charge is the wrong answer: cuts land, but at half strength. The open
+    // window after each attack is where a chain pays out in full.
+    const guarded = this.fsm.is('swipeWind') || this.fsm.is('chargeWind') || this.fsm.is('burstWind') || this.fsm.is('chargeDash');
+    const amount = guarded && !dev ? Math.max(1, Math.floor(info.amount * 0.5)) : info.amount;
+    const result = this.health.applyDamage({ ...info, amount }, this.scene.time.now, 120);
     if (!result.applied) return false;
     this.feedback.flash(Feel.hitFlash);
     // A boss is not knocked around by every cut; only the finisher nudges it.
@@ -382,6 +397,11 @@ export class BossEnemy extends BaseEnemy {
       });
       this.comboFollowUp = null;
       this.fsm.set('idle');
+      return true;
+    }
+    if (this.fsm.is('idle') && this.target) {
+      this.hitsWhileIdle += 1;
+      if (this.hitsWhileIdle >= 3) this.chooseAttack(this.distanceTo(this.target));
     }
     return true;
   }

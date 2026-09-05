@@ -81,9 +81,8 @@ export class InteractionSystem {
   }
 
   private createPrompt(): Phaser.GameObjects.Container | null {
-    if (!this.scene.textures.exists(Tex.keyE)) return null;
-    const icon = this.scene.add.image(0, 0, Tex.keyE).setOrigin(0.5, 1);
-    const label = this.scene.add.bitmapText(9, -13, Tex.font, '', 8).setOrigin(0, 0.5).setTint(0xf2ead8);
+    const icon = this.scene.add.rectangle(0, -13, 22, 12, 0x191621).setOrigin(0.5);
+    const label = this.scene.add.bitmapText(0, -13, Tex.font, '', 8).setOrigin(0.5).setTint(0xf2ead8);
     return this.scene.add.container(0, 0, [icon, label]).setDepth(Depth.Overlay).setVisible(false);
   }
 
@@ -94,7 +93,11 @@ export class InteractionSystem {
       return;
     }
     const label = this.prompt.list[1];
-    if (label instanceof Phaser.GameObjects.BitmapText) label.setText(target.prompt);
+    if (label instanceof Phaser.GameObjects.BitmapText) {
+      label.setText(`[${this.input.prompt('interact')}] ${target.prompt}`);
+      const plate = this.prompt.list[0];
+      if (plate instanceof Phaser.GameObjects.Rectangle) plate.setSize(label.width + 8, 14);
+    }
     this.prompt.setPosition(Math.round(target.x - 8), Math.round(target.y - 20));
     this.prompt.setVisible(true);
   }

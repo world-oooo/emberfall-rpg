@@ -39,3 +39,6 @@ __pycache__/
 
 # local browser-driving scratch
 .playwright-mcp/
+
+# Chromium writes this next to the cwd during Playwright runs
+debug.log

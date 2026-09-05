@@ -9,11 +9,12 @@ import { QUESTS } from '../data/quests';
 import { InputActions } from '../input/InputActions';
 import { SettingsStore } from '../systems/SettingsStore';
 import { Display } from '../systems/DisplaySystem';
+import { ReleaseMenu } from '../ui/ReleaseMenu';
 import { NinePanel, UiColor } from '../ui/widgets/NinePanel';
 import { Plate } from '../ui/widgets/Plate';
 import type { WorldScene } from './WorldScene';
 
-type PanelKind = 'inventory' | 'quests' | 'pause' | 'shop';
+type PanelKind = 'inventory' | 'quests' | 'shop';
 
 /** Top of the boss health bar. Clears the heart plate (ends at y 39) on the narrowest supported view. */
 const BOSS_HUD_Y = 44;
@@ -22,7 +23,9 @@ const SHOP_ITEMS = [
   { itemId: 'rice_ball', quantity: 1, cost: 10 },
   { itemId: 'shuriken', quantity: 5, cost: 15 },
   { itemId: 'life_potion', quantity: 1, cost: 40 },
-  { itemId: 'heavy_blade', quantity: 1, cost: 120 },
+  // Priced so a thorough player can afford it before the shrine as an alternative to two potions; the vault
+  // still hands one out for free to anyone who solves the braziers.
+  { itemId: 'heavy_blade', quantity: 1, cost: 80 },
 ] as const;
 
 interface DialogueCallbacks {
@@ -53,8 +56,8 @@ export class UIScene extends Phaser.Scene {
 
   private panel: Phaser.GameObjects.Container | null = null;
   private panelKind: PanelKind | null = null;
-  private settingIndex = 0;
   private listIndex = 0;
+  private releaseMenu: ReleaseMenu | null = null;
 
   private dialogue: Phaser.GameObjects.Container | null = null;
   private dialogueNode: DialogueNode | null = null;
@@ -71,6 +74,8 @@ export class UIScene extends Phaser.Scene {
   private transitionTimer: Phaser.Time.TimerEvent | null = null;
   private special: Phaser.GameObjects.Container | null = null;
   private specialAction: (() => void) | null = null;
+  private specialChoices: Array<{ label: string; action: () => void }> = [];
+  private specialIndex = 0;
   private modalReadyAt = 0;
 
   private bossHud: Phaser.GameObjects.Container | null = null;
@@ -94,8 +99,25 @@ export class UIScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Phaser reuses scene instances after returning to the title. Display objects do not survive shutdown.
+    this.hearts = [];
+    this.banner = this.toast = this.panel = this.dialogue = this.transition = this.special = this.bossHud = null;
+    this.panelKind = null;
+    this.dialogueNode = null;
+    this.dialogueBody = this.dialogueChoices = this.bossName = null;
+    this.bossFill = this.bossTrail = null;
+    this.transitionTimer = null;
+    this.specialAction = null;
+    this.specialChoices = [];
+    this.dialogueCallbacks = {};
+    this.modalReadyAt = 0;
     Display.applyToCamera(this.cameras.main);
     this.inputActions = new InputActions(this);
+    this.releaseMenu = new ReleaseMenu(this, this.inputActions, {
+      onResume: () => this.setWorldLocked(false),
+      onClose: () => this.setWorldLocked(false),
+      onSaveAndQuit: () => this.saveAndQuitToTitle(),
+    });
     this.buildHud();
     this.layout();
     this.refreshAll();
@@ -110,11 +132,14 @@ export class UIScene extends Phaser.Scene {
         Display.applyToCamera(this.cameras.main);
         this.layout();
         this.rebuildOpenSurfaces();
+        this.releaseMenu?.resize();
       }),
     );
     this.events.on(Phaser.Scenes.Events.WAKE, this.refreshAll, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.inputActions.destroy();
+      this.releaseMenu?.destroy();
+      this.releaseMenu = null;
       for (const unsubscribe of this.unsubscribers.splice(0)) unsubscribe();
       this.events.off(Phaser.Scenes.Events.WAKE, this.refreshAll, this);
     });
@@ -176,7 +201,7 @@ export class UIScene extends Phaser.Scene {
     if (!active) {
       const done = Boolean(save.flags['ending.relit_shrine']);
       this.questTitle.setText(done ? 'EMBER RESTORED' : 'QUESTS');
-      this.questLabel.setText(done ? '' : 'Q to open');
+      this.questLabel.setText(done || !SettingsStore.get().showHints ? '' : `${SettingsStore.keyLabel('quests')} to open`);
     } else {
       const progress = save.quests[active.id];
       const objective = active.objectives.find((entry) => (progress?.objectives[entry.id] ?? 0) < entry.count);
@@ -310,7 +335,7 @@ export class UIScene extends Phaser.Scene {
     const speaker = this.add.bitmapText(textX, 14, Tex.font, this.displayName(node.speakerId), 8).setTint(UiColor.emberBright);
     this.dialogueBody = this.add.bitmapText(textX, this.dialogueBodyTop, Tex.font, '', 8).setTint(UiColor.text).setMaxWidth(textWidth);
     this.dialogueChoices = this.add.bitmapText(textX, this.dialogueBodyTop + bodyHeight + 6, Tex.font, '', 8).setTint(UiColor.good).setMaxWidth(textWidth);
-    const hint = this.add.bitmapText(width - 12, height - 17, Tex.font, 'E', 8).setOrigin(1, 0).setTint(UiColor.textFaint);
+    const hint = this.add.bitmapText(width - 12, height - 17, Tex.font, SettingsStore.keyLabel('interact'), 8).setOrigin(1, 0).setTint(UiColor.textFaint);
     items.push(speaker, this.dialogueBody, this.dialogueChoices, hint);
 
     this.dialogue = this.add
@@ -407,7 +432,7 @@ export class UIScene extends Phaser.Scene {
     this.transitionTimer = this.time.delayedCall(320, () => {
       if (this.transition) return;
       const label = this.add.bitmapText(0, 0, Tex.font, 'ENTERING', 8).setOrigin(0.5, 0.5).setTint(UiColor.textDim);
-      const ember = this.add.image(0, -18, itemTexture('scroll_fire')).setOrigin(0.5);
+      const ember = this.add.image(0, -18, itemTexture('ember')).setOrigin(0.5);
       this.tweens.add({ targets: ember, scale: { from: 0.85, to: 1.15 }, alpha: { from: 0.65, to: 1 }, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       this.transition = this.add
         .container(Math.round(this.w / 2), Math.round(this.h / 2), [ember, label])
@@ -477,14 +502,28 @@ export class UIScene extends Phaser.Scene {
   // ---------------------------------------------------------------- modals
 
   showGameOver(onRetry: () => void): void {
-    this.showSpecial('THE EMBER FADES', 'Press E or Enter to rise at the last checkpoint.', () => {
+    this.showSpecial('THE EMBER FADES', `Press ${SettingsStore.keyLabel('interact')} to rise at the last checkpoint.`, () => {
       this.closeSpecial(false);
       onRetry();
     }, UiColor.danger);
   }
 
   showEnding(): void {
-    this.showSpecial('EMBER RESTORED', 'Warm light returns to Kagehara.\n\nThank you for playing Emberfall.', () => this.closeSpecial(), UiColor.ember);
+    const save = hasSession() ? getSession().save : null;
+    const minutes = save ? Math.max(1, Math.round(save.playtimeMs / 60000)) : 0;
+    const body = save
+      ? `Warm light returns to Kagehara.\nLV ${save.player.level}   ${save.player.coins} coins   ${minutes} min`
+      : 'Warm light returns to Kagehara.';
+    this.showSpecial(
+      'EMBER RESTORED',
+      body,
+      () => this.closeSpecial(),
+      UiColor.ember,
+      [
+        { label: 'Continue Exploring', action: () => this.closeSpecial() },
+        { label: 'Return to Title', action: () => void this.saveAndQuitToTitle() },
+      ],
+    );
   }
 
   showShop(): void {
@@ -496,8 +535,17 @@ export class UIScene extends Phaser.Scene {
     if (this.dialogue) this.updateDialogueReveal(delta);
     if (time < this.modalReadyAt) return;
 
+    if (this.releaseMenu?.active) {
+      this.releaseMenu.update(time);
+      return;
+    }
     if (this.special) {
-      if (this.inputActions.pressed('confirm') || this.inputActions.pressed('cancel')) this.specialAction?.();
+      if (this.specialChoices.length) {
+        if (this.inputActions.pressed('menuDown')) this.moveSpecialChoice(1);
+        if (this.inputActions.pressed('menuUp')) this.moveSpecialChoice(-1);
+        if (this.inputActions.pressed('confirm')) this.specialChoices[this.specialIndex]?.action();
+        if (this.inputActions.pressed('cancel')) this.specialChoices[0]?.action();
+      } else if (this.inputActions.pressed('confirm') || this.inputActions.pressed('cancel')) this.specialAction?.();
       return;
     }
     if (this.dialogue) {
@@ -510,12 +558,7 @@ export class UIScene extends Phaser.Scene {
       return;
     }
     if (this.panel) {
-      if (this.panelKind === 'pause') {
-        if (this.inputActions.pressed('menuDown')) this.moveSetting(1);
-        if (this.inputActions.pressed('menuUp')) this.moveSetting(-1);
-        if (this.inputActions.pressed('menuLeft')) this.adjustSetting(-1);
-        if (this.inputActions.pressed('menuRight') || this.inputActions.pressed('confirm')) this.adjustSetting(1);
-      } else if (this.panelKind === 'inventory' || this.panelKind === 'shop') {
+      if (this.panelKind === 'inventory' || this.panelKind === 'shop') {
         if (this.inputActions.pressed('menuDown')) this.moveList(this.panelKind === 'inventory' ? 5 : 1);
         if (this.inputActions.pressed('menuUp')) this.moveList(this.panelKind === 'inventory' ? -5 : -1);
         if (this.inputActions.pressed('menuRight')) this.moveList(1);
@@ -534,14 +577,13 @@ export class UIScene extends Phaser.Scene {
     }
     if (this.inputActions.pressed('inventory')) this.openPanel('inventory');
     else if (this.inputActions.pressed('quests')) this.openPanel('quests');
-    else if (this.inputActions.pressed('pause')) this.openPanel('pause');
+    else if (this.inputActions.pressed('pause')) this.openPause();
   }
 
   private openPanel(kind: PanelKind): void {
     if (!hasSession()) return;
     this.closePanel(false);
     this.panelKind = kind;
-    this.settingIndex = 0;
     this.listIndex = 0;
     this.setWorldLocked(true);
     this.modalReadyAt = this.time.now + 160;
@@ -578,14 +620,13 @@ export class UIScene extends Phaser.Scene {
     if (kind === 'inventory') this.renderInventory();
     else if (kind === 'shop') this.renderShop();
     else if (kind === 'quests') this.renderQuests();
-    else this.renderPause();
   }
 
   private renderInventory(): void {
     const save = getSession().save;
     const width = Math.min(this.w - 32, 326);
     const height = Math.min(this.h - 28, 172);
-    const { container, items, x, contentTop } = this.beginModal('INVENTORY', width, height, 'ARROWS  E  ESC');
+    const { container, items, x, contentTop } = this.beginModal('INVENTORY', width, height, this.modalHint(['up', 'down', 'interact', 'pause']));
 
     const cols = 5;
     const cell = 23;
@@ -625,7 +666,7 @@ export class UIScene extends Phaser.Scene {
     );
     if (selected) {
       const item = getItem(selected.itemId);
-      const verb = item.category === 'weapon' || item.category === 'accessory' ? 'E   EQUIP' : item.consumable ? 'E   USE' : '';
+      const verb = item.category === 'weapon' || item.category === 'accessory' ? `${SettingsStore.keyLabel('interact')}   EQUIP` : item.consumable ? `${SettingsStore.keyLabel('interact')}   USE` : '';
       if (verb) items.push(this.add.bitmapText(detailX, contentTop + 50, Tex.font, verb, 8).setTint(UiColor.good));
     }
     const coinY = contentTop + 3 * cell + 8;
@@ -639,7 +680,7 @@ export class UIScene extends Phaser.Scene {
     const save = getSession().save;
     const width = Math.min(this.w - 32, 304);
     const height = Math.min(this.h - 28, 178);
-    const { container, items, x, contentTop } = this.beginModal('BOTAN STALL', width, height, 'ARROWS  E  ESC');
+    const { container, items, x, contentTop } = this.beginModal('BOTAN STALL', width, height, this.modalHint(['up', 'down', 'interact', 'pause']));
     SHOP_ITEMS.forEach((offer, index) => {
       const item = getItem(offer.itemId);
       const rowY = contentTop + index * 25;
@@ -664,7 +705,7 @@ export class UIScene extends Phaser.Scene {
     const save = getSession().save;
     const width = Math.min(this.w - 32, 304);
     const height = Math.min(this.h - 28, 174);
-    const { container, items, x, contentTop } = this.beginModal('QUEST LOG', width, height, 'ESC');
+    const { container, items, x, contentTop } = this.beginModal('QUEST LOG', width, height, SettingsStore.keyLabel('pause'));
     let y = contentTop;
     let any = false;
     for (const quest of Object.values(QUESTS)) {
@@ -696,36 +737,13 @@ export class UIScene extends Phaser.Scene {
     this.panel = container;
   }
 
-  private renderPause(): void {
-    const width = Math.min(this.w - 32, 254);
-    const height = Math.min(this.h - 28, 160);
-    const { container, items, x, contentTop } = this.beginModal('PAUSED', width, height, 'ARROWS  E  ESC');
-    const settings = SettingsStore.get();
-    const rows = [
-      { label: 'Resume', value: '' },
-      { label: 'Volume', value: `${Math.round(settings.masterVolume * 100)}%` },
-      { label: 'Screen Shake', value: settings.screenShake ? 'ON' : 'OFF' },
-      { label: 'Display', value: settings.displayMode === 'fill' ? 'FILL WINDOW' : 'FIXED VIEW' },
-      { label: 'Hints', value: settings.showHints ? 'ON' : 'OFF' },
-    ];
-    rows.forEach((row, index) => {
-      const rowY = contentTop + index * 19;
-      const selected = index === this.settingIndex;
-      if (selected) items.push(this.add.rectangle(x + 11, rowY - 4, width - 22, 18, 0x2f2a3a).setOrigin(0, 0));
-      items.push(this.add.bitmapText(x + 20, rowY, Tex.font, row.label, 8).setTint(selected ? UiColor.emberBright : UiColor.text));
-      if (row.value) {
-        items.push(this.add.bitmapText(x + width - 16, rowY, Tex.font, row.value, 8).setOrigin(1, 0).setTint(selected ? UiColor.emberBright : UiColor.textDim));
-      }
-      if (selected) items.push(this.add.image(x + 13, rowY + 4, Tex.arrowRight).setOrigin(0.5));
-    });
-    container.add(items);
-    this.panel = container;
-  }
-
-  private moveSetting(direction: number): void {
-    this.settingIndex = (this.settingIndex + direction + 5) % 5;
-    this.sound.play(sfxKey('menu_move'), { volume: 0.25 });
-    this.renderPanel();
+  private openPause(): void {
+    if (!hasSession()) return;
+    this.closePanel(false);
+    this.closeDialogue(false);
+    this.setWorldLocked(true);
+    this.modalReadyAt = this.time.now + 160;
+    this.releaseMenu?.open('pause');
   }
 
   private moveList(direction: number): void {
@@ -750,27 +768,6 @@ export class UIScene extends Phaser.Scene {
     this.renderPanel();
   }
 
-  private adjustSetting(direction: number): void {
-    if (this.settingIndex === 0) {
-      this.closePanel();
-      return;
-    }
-    const current = SettingsStore.get();
-    if (this.settingIndex === 1) {
-      const volume = Phaser.Math.Clamp(Math.round((current.masterVolume + direction * 0.1) * 10) / 10, 0, 1);
-      SettingsStore.set({ masterVolume: volume });
-      this.sound.volume = volume;
-    } else if (this.settingIndex === 2) {
-      SettingsStore.set({ screenShake: !current.screenShake });
-    } else if (this.settingIndex === 3) {
-      Display.setMode(current.displayMode === 'fill' ? 'fixed' : 'fill');
-    } else {
-      SettingsStore.set({ showHints: !current.showHints });
-    }
-    this.sound.play(sfxKey('menu_accept'), { volume: 0.25 });
-    this.renderPanel();
-  }
-
   private closePanel(unlock = true): void {
     this.panel?.destroy(true);
     this.panel = null;
@@ -778,14 +775,22 @@ export class UIScene extends Phaser.Scene {
     if (unlock) this.setWorldLocked(false);
   }
 
-  private showSpecial(title: string, body: string, action: () => void, tint: number): void {
+  private showSpecial(
+    title: string,
+    body: string,
+    action: () => void,
+    tint: number,
+    choices: Array<{ label: string; action: () => void }> = [],
+    selectedIndex = 0,
+  ): void {
     this.closeDialogue(false);
     this.closePanel(false);
     this.closeSpecial(false);
+    this.specialIndex = selectedIndex;
     this.setWorldLocked(true);
     this.modalReadyAt = this.time.now + 400;
     const width = Math.min(this.w - 40, 292);
-    const height = 118;
+    const height = choices.length ? 136 : 118;
     const x = Math.round((this.w - width) / 2);
     const y = Math.round((this.h - height) / 2);
     const shade = this.add.rectangle(0, 0, this.w, this.h, 0x07060b, 0.9).setOrigin(0, 0);
@@ -800,16 +805,75 @@ export class UIScene extends Phaser.Scene {
       .setTint(UiColor.text)
       .setCenterAlign()
       .setMaxWidth(width - 34);
-    const hint = this.add.bitmapText(x + width / 2, y + height - 22, Tex.font, 'E / ENTER', 8).setOrigin(0.5, 0).setTint(UiColor.textFaint);
-    this.special = this.add.container(0, 0, [shade, frame, inner, heading, copy, hint]).setDepth(Depth.UI + 20);
+    const items: Phaser.GameObjects.GameObject[] = [shade, frame, inner, heading, copy];
+    if (choices.length) {
+      choices.forEach((choice, index) => {
+        const rowY = y + height - 43 + index * 13;
+        const selected = index === this.specialIndex;
+        if (selected) items.push(this.add.image(x + 54, rowY + 4, Tex.arrowRight).setOrigin(0.5));
+        items.push(this.add.bitmapText(x + width / 2, rowY, Tex.font, choice.label, 8).setOrigin(0.5, 0).setTint(selected ? UiColor.emberBright : UiColor.text));
+      });
+    } else {
+      items.push(this.add.bitmapText(x + width / 2, y + height - 22, Tex.font, SettingsStore.hint(['interact']), 8).setOrigin(0.5, 0).setTint(UiColor.textFaint));
+    }
+    this.special = this.add.container(0, 0, items).setDepth(Depth.UI + 20);
     this.specialAction = action;
+    this.specialChoices = choices;
+    this.specialIndex = selectedIndex;
   }
 
   private closeSpecial(unlock = true): void {
     this.special?.destroy(true);
     this.special = null;
     this.specialAction = null;
+    this.specialChoices = [];
+    this.specialIndex = 0;
     if (unlock) this.setWorldLocked(false);
+  }
+
+  private moveSpecialChoice(direction: number): void {
+    if (!this.specialChoices.length) return;
+    // Re-rendering goes through showSpecial, which arms a fresh input delay; a cursor move must not pay it.
+    const readyAt = this.modalReadyAt;
+    this.specialIndex = (this.specialIndex + direction + this.specialChoices.length) % this.specialChoices.length;
+    const choices = this.specialChoices;
+    const action = this.specialAction ?? (() => undefined);
+    const title = choices.length ? 'EMBER RESTORED' : '';
+    const save = hasSession() ? getSession().save : null;
+    const minutes = save ? Math.max(1, Math.round(save.playtimeMs / 60000)) : 0;
+    const body = save ? `Warm light returns to Kagehara.\nLV ${save.player.level}   ${save.player.coins} coins   ${minutes} min` : '';
+    this.special?.destroy(true);
+    this.special = null;
+    this.sound.play(sfxKey('menu_move'), { volume: 0.25 });
+    this.showSpecial(title, body, action, UiColor.ember, choices, this.specialIndex);
+    this.modalReadyAt = readyAt;
+  }
+
+  private modalHint(actions: Array<'up' | 'down' | 'interact' | 'pause'>): string {
+    return actions.map((action) => SettingsStore.keyLabel(action)).join('  ');
+  }
+
+  private async saveAndQuitToTitle(): Promise<boolean> {
+    const world = this.scene.get('WorldScene') as (WorldScene & { saveCurrent?: () => Promise<boolean> }) | null;
+    if (!world || !this.scene.isActive('WorldScene')) return false;
+    try {
+      if (world.saveCurrent) {
+        const saved = await world.saveCurrent();
+        if (!saved) return false;
+      } else {
+        await world.autosave();
+      }
+      this.closeSpecial(false);
+      this.releaseMenu?.destroy();
+      world.endSession();
+      this.scene.stop('WorldScene');
+      this.scene.start('MainMenuScene');
+      return true;
+    } catch (error) {
+      console.error('[SaveSystem] Save & Quit failed', error);
+      this.showToast('Save failed. Try again.');
+      return false;
+    }
   }
 
   private setWorldLocked(locked: boolean): void {
@@ -823,7 +887,7 @@ export class UIScene extends Phaser.Scene {
       // Confirm and interact share keys. Let the closing key fully release before world input resumes,
       // otherwise one press can close and immediately reopen the same dialogue on the next frame.
       this.time.delayedCall(140, () => {
-        if (!this.dialogue && !this.panel && !this.special && this.scene.isActive('WorldScene')) world.inputActions.setEnabled(true);
+        if (!this.dialogue && !this.panel && !this.special && !this.releaseMenu?.active && this.scene.isActive('WorldScene')) world.inputActions.setEnabled(true);
       });
     }
   }

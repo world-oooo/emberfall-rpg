@@ -203,20 +203,25 @@ test('uses an inventory item and persists pause-menu settings', async ({ page, e
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
 
-  // Pause rows: Resume, Volume, Screen Shake, Display, Hints.
+  // Pause -> Options. Master is first; Display is fifth. Menus ignore input for 160 ms after a page switch, and
+  // input is edge-triggered per frame, so page switches get a generous settle and row moves are spaced wider
+  // than a slow frame; two presses inside one frame would collapse into one.
   await page.keyboard.press('ArrowDown');
+  await page.waitForTimeout(140);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(350);
   await page.keyboard.press('ArrowLeft');
   await expect.poll(() => page.evaluate(() => window.__GAME_TEST__?.getSettings().masterVolume)).toBeCloseTo((volumeBefore ?? 0.8) - 0.1, 5);
-
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('ArrowRight');
+  for (let i = 0; i < 4; i += 1) { await page.keyboard.press('ArrowDown'); await page.waitForTimeout(140); }
+  await page.keyboard.press('Enter');
   await expect.poll(() => page.evaluate(() => window.__GAME_TEST__?.getSettings().displayMode)).toBe('fixed');
-  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(140);
+  await page.keyboard.press('Enter');
   await expect.poll(() => page.evaluate(() => window.__GAME_TEST__?.getSettings().displayMode)).toBe('fill');
-
   await page.keyboard.press('Escape');
-  await page.waitForTimeout(320);
+  await page.waitForTimeout(350);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(350);
   const before = await getPlayerState(page);
   await page.keyboard.down('KeyD');
   await page.waitForTimeout(400);

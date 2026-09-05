@@ -71,6 +71,11 @@ export const DIALOGUE = define({
     portrait: 'master_ryo_face',
     lines: ['You came back with the Ember and all your fingers. Rest. The forms will keep until morning.'],
   },
+  child_mimi_rewarded: {
+    speakerId: 'child_mimi',
+    portrait: 'child_mimi_face',
+    lines: ['You found it! Keep the charm, its luck will bring you home. And take this medicine for the road.'],
+  },
   child_mimi_after: {
     speakerId: 'child_mimi',
     portrait: 'child_mimi_face',
@@ -79,7 +84,7 @@ export const DIALOGUE = define({
   merchant_botan_after: {
     speakerId: 'merchant_botan',
     portrait: 'merchant_botan_face',
-    lines: ['Business doubles when the shrine burns. Take a discount you did not ask for.'],
+    lines: ['Business returns when the shrine burns. My shelves are ready for your next journey.'],
   },
   guard_goro_after: {
     speakerId: 'guard_goro',
