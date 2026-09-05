@@ -1,10 +1,11 @@
 import Phaser from 'phaser';
-import { ASSET_ROOT, Tex, itemTexture, sfxKey } from '../config/assets';
+import { ASSET_ROOT, Tex, itemTexture, musicKey, sfxKey } from '../config/assets';
 import { Display } from '../systems/DisplaySystem';
 import { registerHeroAnimations } from '../entities/player/heroAnimations';
 import { ITEMS } from '../data/items';
 import { SFX_IDS } from '../data/audio';
 import { NinePanel } from '../ui/widgets/NinePanel';
+import { gameEvents } from '../core/events';
 
 /** Core bundle: player, UI, common SFX, item icons. Map-specific bundles load in WorldScene. */
 export class PreloadScene extends Phaser.Scene {
@@ -82,9 +83,17 @@ export class PreloadScene extends Phaser.Scene {
     for (const id of SFX_IDS) {
       this.load.audio(sfxKey(id), [`audio/sfx/${id}.ogg`, `audio/sfx/${id}.mp3`]);
     }
+
+    // Title-screen assets. Loaded here, under the bar, so the menu appears the instant loading completes.
+    // Left to MainMenuScene's own preload, the ~800 KB title track and two tilesets downloaded on a blank
+    // screen after the bar had already read 100%, which looked like a hang.
+    this.load.spritesheet('title_nature', 'tiles/TilesetNature.png', { frameWidth: 16, frameHeight: 16, margin: 1, spacing: 2 });
+    this.load.spritesheet('title_house', 'tiles/TilesetHouse.png', { frameWidth: 16, frameHeight: 16, margin: 1, spacing: 2 });
+    this.load.audio(musicKey('title'), 'audio/music/title.ogg');
   }
 
   create(): void {
+    gameEvents.emit('bootPreloadComplete', { at: performance.now() });
     registerHeroAnimations(this);
     this.registerCommonAnimations();
     this.scene.start('MainMenuScene');

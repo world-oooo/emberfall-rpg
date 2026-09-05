@@ -13,7 +13,20 @@ const OUT = resolve(process.cwd(), 'artifacts', 'playthrough');
 
 async function shot(page: Page, name: string, settle = 700): Promise<void> {
   await page.waitForTimeout(settle);
-  await page.screenshot({ path: resolve(OUT, `rc-${name}.png`) });
+  await writeShot(page, resolve(OUT, `rc-${name}.png`));
+}
+
+/** Windows occasionally holds a just-written PNG open (indexer, AV); retry the write briefly rather than fail the pass. */
+async function writeShot(page: Page, path: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await page.screenshot({ path });
+      return;
+    } catch (error) {
+      if (attempt >= 3) throw error;
+      await page.waitForTimeout(350);
+    }
+  }
 }
 
 /** Menus ignore input for 160 ms after opening or switching pages. */

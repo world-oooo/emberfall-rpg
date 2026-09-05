@@ -90,7 +90,7 @@ import/export, fullscreen toggle and credits.
 
 ### P2 — QA
 
-Twenty-four end-to-end tests (two of them a synthetic gamepad), 35 unit tests, map validation, a production-preview smoke, a three-engine
+Twenty-six end-to-end tests (two of them a synthetic gamepad, two for code-less keydowns), 35 unit tests, map validation, a production-preview smoke, a three-engine
 completion matrix, a scripted screenshot baseline, a scripted measurement pass and a boss fight measured with
 real attacks. See [TESTING.md](TESTING.md) and [RELEASE_AUDIT.md](RELEASE_AUDIT.md).
 
@@ -133,6 +133,18 @@ Recorded because each was invisible from reading the code alone:
     while Firefox's permission prompt is open, and transitions wait on the save queue.
 12. New Game silently dropped an Enter press that arrived before the save slot had been read.
 13. A bot that mashed attack killed the boss in 4.4 s; its intro was a free opening and nothing punished trading.
+
+Found by playing the release candidate screen by screen:
+
+14. A blank screen after the loading bar reached 100%: the title's music and tilesets loaded afterwards, on
+    nothing. About five seconds at 1.5 Mbps.
+15. Options scrolled ten rows through a panel that had room for them, and nothing said left/right adjusts a
+    value.
+16. Toasts sat at the bottom, on the hero when entering a map from the south and where the boss is dodged.
+17. The "[E] Talk" prompt stayed up during the dialogue it opened and collided with the quest tracker near
+    the top of the view.
+18. Inventory, shop and quest-log headers listed bare key names where the release menu used key-plus-verb.
+19. A keydown without a `code` (IMEs, virtual keyboards, remote desktops) never reached the input layer.
 
 ## Comparison references
 

@@ -11,6 +11,9 @@ import { Plate } from './widgets/Plate';
 
 export type ReleaseMenuKind = 'pause' | 'options' | 'controls' | 'save' | 'credits';
 
+/** Row pitch in logical pixels: an 8 px glyph line with a 5 px gap reads cleanly at every zoom. */
+const ROW_HEIGHT = 13;
+
 interface MenuRow {
   label: string;
   value?: string;
@@ -398,7 +401,7 @@ export class ReleaseMenu {
     const w = Display.width;
     const h = Display.height;
     const width = Math.min(w - 24, w <= 330 ? 292 : 336);
-    const height = Math.min(h - 18, h <= 190 ? 154 : 184);
+    const height = this.panelHeight();
     const x = Math.round((w - width) / 2);
     const y = Math.round((h - height) / 2);
     const shade = this.scene.add.rectangle(0, 0, w, h, 0x07060b, 0.68).setOrigin(0, 0);
@@ -428,26 +431,32 @@ export class ReleaseMenu {
 
   private renderRows(items: Phaser.GameObjects.GameObject[], x: number, y: number, width: number, height: number): void {
     const rows = this.rows();
-    const rowHeight = 16;
-    const visibleRows = Math.max(5, Math.floor((height - 54) / rowHeight));
+    const visibleRows = this.visibleRowCount(rows.length, height);
     this.keepSelectedVisible(rows.length, visibleRows);
     const top = y + 32;
     rows.slice(this.scroll, this.scroll + visibleRows).forEach((row, offset) => {
       const index = this.scroll + offset;
       const selected = index === this.index;
-      const rowY = top + offset * rowHeight;
+      const rowY = top + offset * ROW_HEIGHT;
       const enabled = row.enabled !== false;
-      if (selected) items.push(this.scene.add.rectangle(x + 11, rowY - 4, width - 22, 15, 0x2f2a3a).setOrigin(0, 0));
+      if (selected) items.push(this.scene.add.rectangle(x + 11, rowY - 3, width - 22, ROW_HEIGHT - 1, 0x2f2a3a).setOrigin(0, 0));
       if (selected) items.push(this.scene.add.image(x + 14, rowY + 3, Tex.arrowRight).setOrigin(0.5));
       items.push(this.scene.add.bitmapText(x + 24, rowY, Tex.font, row.label, 8).setTint(!enabled ? UiColor.textFaint : selected ? UiColor.emberBright : UiColor.text));
       if (row.value) {
-        items.push(
-          this.scene.add
-            .bitmapText(x + width - 16, rowY, Tex.font, row.value, 8)
-            .setOrigin(1, 0)
-            .setTint(!enabled ? UiColor.textFaint : selected ? UiColor.emberBright : UiColor.textDim)
-            .setMaxWidth(Math.floor(width * 0.45)),
-        );
+        // A selected row that can be adjusted shows the value between two arrows: that is how a player learns
+        // that left and right change it, without a hint competing for header space.
+        const flank = selected && enabled && !!row.adjust;
+        const valueRight = x + width - (flank ? 24 : 16);
+        const value = this.scene.add
+          .bitmapText(valueRight, rowY, Tex.font, row.value, 8)
+          .setOrigin(1, 0)
+          .setTint(!enabled ? UiColor.textFaint : selected ? UiColor.emberBright : UiColor.textDim)
+          .setMaxWidth(Math.floor(width * 0.45));
+        items.push(value);
+        if (flank) {
+          items.push(this.scene.add.image(valueRight - value.width - 6, rowY + 4, Tex.arrowLeft).setOrigin(0.5).setTint(UiColor.emberBright));
+          items.push(this.scene.add.image(x + width - 14, rowY + 4, Tex.arrowRight).setOrigin(0.5).setTint(UiColor.emberBright));
+        }
       }
     });
     if (this.listeningFor) {
@@ -506,7 +515,22 @@ export class ReleaseMenu {
     items.push(this.scene.add.bitmapText(x + width / 2, y + height - 18, Tex.font, 'docs/ASSET_LICENSES.md', 8).setOrigin(0.5, 0).setTint(UiColor.textFaint));
   }
 
-  private keepSelectedVisible(rowCount: number, visibleRows = Math.max(5, Math.floor((Math.min(Display.height - 18, Display.height <= 190 ? 154 : 184) - 54) / 16))): void {
+  /** Nearly the full screen height: the menu is a modal and the Options page has ten rows to show. */
+  private panelHeight(): number {
+    return Math.min(Display.height - 8, 200);
+  }
+
+  /**
+   * How many rows fit. When every row fits there is no page indicator, so the rows may run to the bottom
+   * margin; otherwise the last slot is kept clear for it. At 720p, 768p and 1080p all ten Options rows fit.
+   */
+  private visibleRowCount(rowCount: number, height = this.panelHeight()): number {
+    const fitAll = Math.floor((height - 42) / ROW_HEIGHT);
+    if (rowCount <= fitAll) return Math.max(1, rowCount);
+    return Math.max(5, Math.floor((height - 52) / ROW_HEIGHT));
+  }
+
+  private keepSelectedVisible(rowCount: number, visibleRows = this.visibleRowCount(rowCount)): void {
     if (this.index < this.scroll) this.scroll = this.index;
     if (this.index >= this.scroll + visibleRows) this.scroll = this.index - visibleRows + 1;
     this.scroll = Math.max(0, Math.min(this.scroll, Math.max(0, rowCount - visibleRows)));
@@ -524,7 +548,8 @@ export class ReleaseMenu {
   private hint(): string {
     if (this.mode === 'credits') return `${SettingsStore.keyLabel('interact')} BACK`;
     if (this.mode === 'confirm') return `${SettingsStore.keyLabel('interact')} SELECT`;
-    return `${SettingsStore.keyLabel('interact')} SELECT  ${inputBindingStore.getActiveDevice() === 'gamepad' ? 'B' : 'ESC'} BACK`;
+    // The real pause label, so the hint stays true if Pause is rebound and matches the inventory/quest headers.
+    return `${SettingsStore.keyLabel('interact')} SELECT  ${inputBindingStore.getActiveDevice() === 'gamepad' ? 'B' : SettingsStore.keyLabel('pause')} BACK`;
   }
 
   private isFullscreen(): boolean {

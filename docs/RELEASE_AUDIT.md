@@ -15,7 +15,7 @@ Environment: Windows 11, Node 24.15.0, npm 11.12.1 (engines >= 22.12.0; CI runs 
 | Unit | Pass, 35 tests in 7 files |
 | Map validation | Pass, village / woods / shrine, reachability through seal gates |
 | Build | Pass, 153 kB game JS (46.7 kB gzip), 1.37 MB Phaser |
-| Chromium E2E | Pass, 24 tests on the dev server (15 game, 7 release surface, 2 gamepad), green under a 6x CPU throttle |
+| Chromium E2E | Pass, 26 tests on the dev server (15 game, 7 release surface, 2 gamepad, 2 input fallback), green under a 6x CPU throttle |
 | Production preview | Pass: `vite preview` of the build, canvas drawn, `window.__GAME_TEST__` absent, no failed requests, no console errors, walk village → woods, reload, Continue, walk back |
 | WebKit | Completion run at 1366×768, 1440×900 and 1920×1080 (see Browser) |
 | Firefox | Completion run at 1366×768, 1440×900 and 1920×1080 (see Browser) |
@@ -93,6 +93,18 @@ card re-armed a 400 ms input lockout on every cursor move.
 P2: real controller hardware and the granted-fullscreen path not exercised here (the synthetic-pad path is); boss balance estimate rests on a bot
 floor rather than human playtesting; the title's main-menu frame spikes under the software rasteriser are the
 one-time rebuild after the save slot loads and were not re-measured on hardware.
+
+## Post-RC hands-on pass
+
+Played the captures screen by screen (the in-app browser pane reports `document.hidden` and is throttled, so
+the pass used Playwright captures). Fixed: a blank pause after the loading bar (235 ms locally, ~5 s at
+1.5 Mbps; now ~10 ms either way, measured by the game's own boot stamps); Options scrolling ten rows through a
+panel with room for them, with no sign that left/right adjusts a value (13 px rows, panel uses the screen
+height, selected adjustable value shown between arrow sprites); toasts covering the hero at the bottom of the
+screen (now anchored under the HUD row, area banner or boss bar); the world prompt staying up during the
+dialogue it opened and colliding with the quest tracker near the top of the view; panel headers in bare key
+names; and keydown events without a `code` being invisible to input. All re-verified: 26/26 E2E, shots
+regenerated, boot gap measured before and after. Details in PLAYTEST.md and POLISH_AUDIT.md.
 
 ## Verification record
 

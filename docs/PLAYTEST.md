@@ -35,6 +35,33 @@ A player who explores the optional content runs about 15–20 minutes; a direct 
 - **The Keeper's charge is the hardest attack to read** at 4× zoom on a small window, because the telegraph
   rectangle can start off screen. It is fair at 5× and above.
 
+## Hands-on pass after the release candidate
+
+Played through the captures screen by screen as a player would, and fixed what read badly:
+
+- **A blank pause after the loading bar.** MainMenuScene loaded its own title track (~800 KB) and two
+  tilesets after the bar had already read 100%, on an empty screen: 214 ms locally, about five seconds on a
+  1.5 Mbps connection, and it looked like a hang. Those assets now load under the bar; the title appears the
+  frame loading completes. See PERFORMANCE.md.
+- **Options scrolled with room to spare.** Ten rows at a 16 px pitch could never fit the 184 px panel on a
+  768-tall screen, yet the panel showed dead space. Rows are 13 px and the panel uses the screen height; all
+  ten rows fit at 720p, 768p and 1080p with no page indicator.
+- **Nothing said left/right adjusts a value.** The selected adjustable row now shows its value between the
+  two arrow sprites. A text hint in the header was tried first and collided with the title at 1366×768.
+- **Toasts covered the hero.** "Quest complete" landed on the hero entering the shrine from the south, and the
+  boss's phase message landed where the player dodges. Toasts now anchor at the top, under whichever of the
+  HUD row, area banner or boss bar is showing.
+- **The "[E] Talk" prompt stayed up during the dialogue it opened**, and near the top of the view it collided
+  with the quest tracker. It hides while control is locked and flips below its target in the HUD band.
+- **Panel headers spoke in bare key names** ("Up Down E Escape") while the release menu said "E SELECT
+  ESC BACK". Inventory, shop and quest log now use the same key-plus-verb language, and the release menu's
+  BACK label comes from the real Pause binding rather than a hard-coded "ESC".
+- **A keydown without a `code`** (some IMEs, virtual keyboards, remote desktops) was invisible to the input
+  layer. It now falls back to `key`, then `keyCode`.
+
+The in-app browser pane used for the first attempt reports `document.hidden`, so Chromium throttles it and
+Phaser pauses; that environment is unusable for judging feel, and the pass was done from Playwright captures.
+
 ## Slow machines and input
 
 Input edges are taken from the browser's own `keydown` event, once per press, and queued one-per-frame. On a

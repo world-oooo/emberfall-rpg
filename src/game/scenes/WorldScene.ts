@@ -287,6 +287,7 @@ export class WorldScene extends Phaser.Scene {
     this.player.update(delta);
     this.combat.update(delta);
     if (!this.player.controlLocked && !this.player.health.isDead) this.interactions.update();
+    else this.interactions.hidePrompt();
     this.player.postUpdate();
     for (const npc of this.npcs) npc.syncDepth();
     // Lead the camera in the direction of travel so the player sees more of where they are going.

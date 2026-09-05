@@ -60,6 +60,19 @@ use". Warming the HTTP cache recovers the network time, which dominates, without
 
 Music was re-encoded at `-q:a 3` (`tools/assets/curate.py`), taking the audio payload from 16 MB to 6.4 MB.
 
+## Boot: loading bar to title
+
+The game stamps two moments (`bootPreloadComplete`, `bootMenuReady`) and `tests/e2e/boot-gap.spec.ts` (run by
+`npm run test:perf`) reads them through the DEV bridge. Before the fix, MainMenuScene loaded its own title
+track (~800 KB) and two tilesets after the bar had already read 100%, on an empty screen. They now load under
+the bar. `E2E_NET_KBPS=1500` throttles the network through CDP; the dev server itself serves hundreds of
+unbundled modules, so under throttle the page takes minutes to arrive and only the post-bar span is judged.
+
+| Loading done → menu drawn | Unthrottled | 1.5 Mbps |
+|---|---|---|
+| Before | 235 ms | 4948 ms |
+| After | 11 ms | 10 ms |
+
 ## Input latency
 
 44 ms from `keydown` to the first change in player position under the software rasteriser (15 ms in an earlier

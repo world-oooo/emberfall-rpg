@@ -10,6 +10,7 @@ import { Plate } from '../ui/widgets/Plate';
 import { ReleaseMenu } from '../ui/ReleaseMenu';
 import { titleVignette } from '../ui/TitleVignette';
 import { MAPS } from '../data/maps';
+import { gameEvents } from '../core/events';
 
 interface MenuEntry {
   label: string;
@@ -63,6 +64,7 @@ export class MainMenuScene extends Phaser.Scene {
     this.input2 = new InputActions(this);
     this.releaseMenu = new ReleaseMenu(this, this.input2, { allowImport: true, saveSystem: this.saves, onSaveChanged: () => void this.loadContinueSlot() });
     this.moveCursor(0);
+    gameEvents.emit('bootMenuReady', { at: performance.now() });
     this.playTitleMusic();
     const stopAudioSettings = SettingsStore.onChange(settings => {
       this.sound.volume = settings.masterVolume;

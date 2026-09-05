@@ -271,6 +271,16 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
+  /** Lowest edge of the HUD row, quest tracker, area banner and boss bar, whichever are showing. */
+  private topBandBottom(): number {
+    let bottom = 0;
+    for (const item of [this.hud, this.banner, this.bossHud]) {
+      if (!item || !item.visible) continue;
+      bottom = Math.max(bottom, item.getBounds().bottom);
+    }
+    return Math.min(bottom, this.h * 0.45);
+  }
+
   showToast(text: string): void {
     this.toast?.destroy(true);
     const maxWidth = Math.min(this.w - 48, 216);
@@ -279,15 +289,18 @@ export class UIScene extends Phaser.Scene {
     const height = label.height + 13;
     const plate = new Plate(this, width, height, { radius: 4, alpha: 0.82, stroke: UiColor.textFaint, strokeAlpha: 0.4 });
     plate.setPosition(-width / 2, 0);
+    // Anchored at the top, under whatever occupies the top band. The bottom of the screen is where the hero
+    // stands on entering a map from the south and where the boss fight is dodged; a message there hid both.
+    const restY = Math.round(this.topBandBottom() + 6);
     const container = this.add
-      .container(Math.round(this.w / 2), this.h - height - 14, [plate, label])
+      .container(Math.round(this.w / 2), restY - 6, [plate, label])
       .setDepth(Depth.UI + 3)
       .setAlpha(0);
     this.toast = container;
     this.tweens.add({
       targets: container,
       alpha: 1,
-      y: this.h - height - 20,
+      y: restY,
       duration: 170,
       yoyo: true,
       hold: 1500,
@@ -705,7 +718,7 @@ export class UIScene extends Phaser.Scene {
     const save = getSession().save;
     const width = Math.min(this.w - 32, 304);
     const height = Math.min(this.h - 28, 174);
-    const { container, items, x, contentTop } = this.beginModal('QUEST LOG', width, height, SettingsStore.keyLabel('pause'));
+    const { container, items, x, contentTop } = this.beginModal('QUEST LOG', width, height, this.modalHint(['pause']));
     let y = contentTop;
     let any = false;
     for (const quest of Object.values(QUESTS)) {
@@ -854,8 +867,13 @@ export class UIScene extends Phaser.Scene {
     this.modalReadyAt = readyAt;
   }
 
+  /** Same language as the release menu: key plus verb. Movement keys are left out, as they are there. */
   private modalHint(actions: Array<'up' | 'down' | 'interact' | 'pause'>): string {
-    return actions.map((action) => SettingsStore.keyLabel(action)).join('  ');
+    const verbs: Partial<Record<'up' | 'down' | 'interact' | 'pause', string>> = { interact: 'SELECT', pause: 'BACK' };
+    return actions
+      .filter((action) => verbs[action])
+      .map((action) => `${SettingsStore.keyLabel(action)} ${verbs[action]}`)
+      .join('  ');
   }
 
   private async saveAndQuitToTitle(): Promise<boolean> {

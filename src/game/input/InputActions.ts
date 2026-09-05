@@ -134,8 +134,8 @@ export class InputActions {
    */
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     if (!this.enabled || event.repeat) return;
-    // Both shift keys share one Phaser keycode, so namesByCode only holds the left one.
-    const code = event.code === 'ShiftRight' ? 'ShiftLeft' : event.code;
+    const code = resolveCode(event);
+    if (!code) return;
     const names = this.namesByCode.get(code);
     if (!names) return;
     this.bindingStore.setActiveDevice('keyboard');
@@ -394,6 +394,45 @@ function keyCodeBindings(bindings: Readonly<Record<BindableAction, readonly stri
   };
 
   return { ...directions, ...actions };
+}
+
+/**
+ * The DOM `code` is the primary key. Some environments (IMEs, virtual keyboards, remote desktops) leave it
+ * empty while still setting `key` or `keyCode`; fall back through those so a real press is never lost.
+ * Both shift keys share one Phaser keycode, so the map only holds the left one.
+ */
+function resolveCode(event: KeyboardEvent): string | null {
+  if (event.code) return event.code === 'ShiftRight' ? 'ShiftLeft' : event.code;
+  return codeFromKey(event.key) ?? KEYCODE_TO_CODE.get(event.keyCode) ?? null;
+}
+
+/** Derives a DOM code from `event.key` for environments that leave `event.code` empty. */
+function codeFromKey(key: string): string | null {
+  if (!key) return null;
+  if (key.length === 1) {
+    const upper = key.toUpperCase();
+    if (upper >= 'A' && upper <= 'Z') return `Key${upper}`;
+    if (key >= '0' && key <= '9') return `Digit${key}`;
+    if (key === ' ') return 'Space';
+    return null;
+  }
+  switch (key) {
+    case 'Enter':
+    case 'Escape':
+    case 'Backspace':
+    case 'Tab':
+    case 'ArrowUp':
+    case 'ArrowDown':
+    case 'ArrowLeft':
+    case 'ArrowRight':
+      return key;
+    case 'Esc':
+      return 'Escape';
+    case 'Shift':
+      return 'ShiftLeft';
+    default:
+      return null;
+  }
 }
 
 function codesToKeyCodes(codes: readonly string[]): number[] {

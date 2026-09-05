@@ -9,7 +9,7 @@ scripted evidence passes for screenshots, viewport coverage and frame-time measu
 |---|---|
 | `npm run check` | Strict TypeScript, unit tests, generated-map validation |
 | `npm run build` | Production bundle; catches missing or misreferenced runtime assets |
-| `npm run test:e2e` | Twenty-four Playwright tests against the real WebGL canvas |
+| `npm run test:e2e` | Twenty-six Playwright tests against the real WebGL canvas |
 | `npm run test:production` | Production build plus production-preview smoke test; asserts no development-only test bridge |
 | `npm run test:perf` | Measurement pass → `artifacts/measurements.md`, plus a boss fight with real attacks → `artifacts/boss-balance.md` |
 | `npm run test:shots` | Screenshot baseline → `artifacts/playthrough/*.png`, including the release-candidate menus at 1366×768 |
@@ -33,7 +33,7 @@ config allows a single retry.
 
 ## Browser suite
 
-Twenty-four tests, all of which fail on any unexpected console error or page error. Fifteen cover the game:
+Twenty-six tests, all of which fail on any unexpected console error or page error. Fifteen cover the game:
 
 1. Boots to a WebGL canvas on the main menu.
 2. The canvas fills the browser window.
@@ -70,6 +70,18 @@ navigator.getGamepads:
 23. A gamepad is detected, its D-pad navigates the title menu, A confirms Continue, and the active device
     flips to gamepad.
 24. The left stick walks the hero, the Menu button opens pause, the D-pad moves through the rows, and A resumes.
+
+Two cover keyboard events that arrive without a `code` (`input-fallback.spec.ts`), as some IMEs, virtual
+keyboards and remote desktops deliver them:
+
+25. A keydown carrying only `key` still moves the title cursor and confirms New Game.
+26. A keydown carrying only `keyCode` still confirms.
+
+`npm run test:perf` additionally runs `boot-gap.spec.ts`, which reads two stamps the game emits
+(`bootPreloadComplete` → `bootMenuReady`) and asserts the title menu appears within a frame of the loading bar
+completing. `E2E_NET_KBPS=1500` throttles the network through CDP to show the real-world cost; note the dev
+server serves hundreds of unbundled modules, so the page itself takes minutes to arrive under throttle and
+only the post-bar span is judged.
 
 ### Slow machines
 

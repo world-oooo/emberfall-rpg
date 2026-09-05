@@ -16,7 +16,17 @@ let step = 0;
 async function shot(page: Page, name: string, settle = 700): Promise<void> {
   step += 1;
   await page.waitForTimeout(settle);
-  await page.screenshot({ path: resolve(OUT, `${String(step).padStart(2, '0')}-${name}.png`) });
+  const path = resolve(OUT, `${String(step).padStart(2, '0')}-${name}.png`);
+  // Windows occasionally holds a just-written PNG open (indexer, AV); retry the write briefly rather than fail the pass.
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await page.screenshot({ path });
+      return;
+    } catch (error) {
+      if (attempt >= 3) throw error;
+      await page.waitForTimeout(350);
+    }
+  }
 }
 
 test('captures the playthrough baseline @shots', async ({ page, errorWatcher }) => {
@@ -108,8 +118,9 @@ test('captures the playthrough baseline @shots', async ({ page, errorWatcher }) 
 
   await teleport(page, 248, 176);
   await shot(page, 'boss-arena', 1100);
-  await damageEnemy(page, 'guardian_tanuki', 26);
-  await shot(page, 'boss-fight', 700);
+  // Past the phase-two threshold (140 HP boss): the phase toast is on screen at rest ~450 ms after it fires.
+  await damageEnemy(page, 'guardian_tanuki', 100);
+  await shot(page, 'boss-fight', 450);
   await damageEnemy(page, 'guardian_tanuki');
   await shot(page, 'boss-defeated', 1600);
 

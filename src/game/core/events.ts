@@ -14,6 +14,9 @@ export interface GameEventMap {
   objectInteracted: { interactionId: string };
   areaEntered: { mapId: string };
   toast: { text: string };
+  /** Boot timeline stamps (performance.now) so the DEV bridge can measure loading-done → title-drawn. */
+  bootPreloadComplete: { at: number };
+  bootMenuReady: { at: number };
 }
 
 type Handler<T> = (payload: T) => void;

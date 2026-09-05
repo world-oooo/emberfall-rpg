@@ -86,6 +86,11 @@ export class InteractionSystem {
     return this.scene.add.container(0, 0, [icon, label]).setDepth(Depth.Overlay).setVisible(false);
   }
 
+  /** Hides the "[E] Talk" label; the world scene calls this whenever it skips update() because control is locked. */
+  hidePrompt(): void {
+    this.updatePrompt(null);
+  }
+
   private updatePrompt(target: Interactable | null): void {
     if (!this.prompt) return;
     if (!target) {
@@ -98,7 +103,13 @@ export class InteractionSystem {
       const plate = this.prompt.list[0];
       if (plate instanceof Phaser.GameObjects.Rectangle) plate.setSize(label.width + 8, 14);
     }
-    this.prompt.setPosition(Math.round(target.x - 8), Math.round(target.y - 20));
+    // Above the target by default; below it when that would land in the HUD band at the top of the view,
+    // where it collided with the quest tracker.
+    // worldView, not scrollY: with an integer camera zoom the visible top of the world is not scrollY.
+    const viewTop = this.scene.cameras.main.worldView.y;
+    const above = target.y - 20;
+    const y = above - viewTop < 46 ? target.y + 12 : above;
+    this.prompt.setPosition(Math.round(target.x - 8), Math.round(y));
     this.prompt.setVisible(true);
   }
 }

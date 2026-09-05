@@ -58,6 +58,7 @@ declare global {
       saveNow: () => Promise<void>;
       getMenuSelection: () => string | null;
       getActiveDevice: () => 'keyboard' | 'gamepad';
+      getBootTimeline: () => { preloadCompleteAt: number; menuReadyAt: number };
     };
   }
 }

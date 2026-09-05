@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests/e2e',
   // The measurement pass is slow and asserts nothing; run it on demand with `npm run test:perf`.
-  testIgnore: ['**/production-smoke.spec.ts', '**/performance.spec.ts', '**/boss-balance.spec.ts', '**/screenshots.spec.ts', '**/rc-screens.spec.ts', '**/acceptance.spec.ts'],
+  testIgnore: ['**/production-smoke.spec.ts', '**/performance.spec.ts', '**/boss-balance.spec.ts', '**/screenshots.spec.ts', '**/rc-screens.spec.ts', '**/acceptance.spec.ts', '**/boot-gap.spec.ts'],
   fullyParallel: false,
   // Two spec files would otherwise run on two workers. Under the software rasteriser that halves the frame
   // rate of both and turns menu timing into a coin toss; one worker keeps every run deterministic.

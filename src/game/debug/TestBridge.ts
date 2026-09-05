@@ -4,6 +4,7 @@ import type { WorldScene } from '../scenes/WorldScene';
 import { SettingsStore, type Settings } from '../systems/SettingsStore';
 import { Display, type DisplayLayout } from '../systems/DisplaySystem';
 import { inputBindingStore } from '../input/InputBindingStore';
+import { gameEvents } from '../core/events';
 
 /**
  * DEV-only read-mostly API for Playwright: window.__GAME_TEST__.
@@ -30,6 +31,8 @@ export interface GameTestBridge {
   saveNow: () => Promise<void>;
   getMenuSelection: () => string | null;
   getActiveDevice: () => 'keyboard' | 'gamepad';
+  /** First-boot stamps: loader complete and title menu drawn (performance.now ms; 0 until they happen). */
+  getBootTimeline: () => { preloadCompleteAt: number; menuReadyAt: number };
 }
 
 export function installTestBridge(game: Phaser.Game): void {
@@ -37,8 +40,16 @@ export function installTestBridge(game: Phaser.Game): void {
     const s = game.scene.getScene('WorldScene') as WorldScene | null;
     return s && game.scene.isActive('WorldScene') ? s : null;
   };
+  const timeline = { preloadCompleteAt: 0, menuReadyAt: 0 };
+  gameEvents.on('bootPreloadComplete', ({ at }) => {
+    if (!timeline.preloadCompleteAt) timeline.preloadCompleteAt = at;
+  });
+  gameEvents.on('bootMenuReady', ({ at }) => {
+    if (!timeline.menuReadyAt) timeline.menuReadyAt = at;
+  });
   const bridge: GameTestBridge = {
     ready: false,
+    getBootTimeline: () => ({ ...timeline }),
     rendererType: () => (game.renderer?.type === 2 ? 'webgl' : game.renderer?.type === 1 ? 'canvas' : 'unknown'),
     activeScenes: () => game.scene.getScenes(true).map((s) => s.scene.key),
     getPlayerState: () => {
