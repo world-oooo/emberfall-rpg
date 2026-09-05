@@ -104,6 +104,13 @@ completing. `E2E_NET_KBPS=1500` throttles the network through CDP to show the re
 server serves hundreds of unbundled modules, so the page itself takes minutes to arrive under throttle and
 only the post-bar span is judged.
 
+### Why there is no pixel comparison
+
+The capture passes produce baselines that are inspected by eye and kept in `artifacts/playthrough/`. They are
+not diffed automatically: the software rasteriser used in CI and a real GPU rasterise text and particles
+differently enough that a pixel gate would fail on renderer, not on regressions. Layout regressions that
+matter are caught by the functional tests (menu rows by label, panel state, HUD state through the bridge).
+
 ### Slow machines
 
 A GPU-less CI runner renders the game at two or three frames per second, and Phaser clamps each frame's delta
