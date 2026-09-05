@@ -1,6 +1,6 @@
 # Emberfall measurements
 
-Generated 2026-09-05T05:59:53.683Z
+Generated 2026-09-05T11:35:33.172Z
 
 ## Viewport matrix
 
@@ -19,23 +19,23 @@ Generated 2026-09-05T05:59:53.683Z
 
 | Scene | Avg ms | p95 | p99 | Max | Frames > 33 ms |
 |---|---|---|---|---|---|
-| Main menu | 19.38 | 25.8 | 146.2 | 161.3 | 8 |
-| Village idle | 17.61 | 23 | 25.2 | 37.1 | 1 |
-| Village walking | 20.02 | 22.4 | 26.3 | 30.9 | 0 |
-| Woods idle | 19.83 | 24.9 | 26.6 | 27.7 | 0 |
-| Shrine idle | 18.14 | 21.4 | 23.7 | 35.1 | 2 |
+| Main menu | 16.6 | 18.5 | 25.1 | 33.7 | 1 |
+| Village idle | 17.28 | 21.2 | 26 | 28 | 0 |
+| Village walking | 20.2 | 25.2 | 27.6 | 38.1 | 1 |
+| Woods idle | 23.02 | 28.1 | 32.4 | 40.2 | 2 |
+| Shrine idle | 19.11 | 23.2 | 25.1 | 38 | 1 |
 
 ## Map transitions
 
 | Transition | Cold ms | Warm ms |
 |---|---|---|
-| village to woods | 1136 | 234 |
-| woods to village | 233 | - |
-| woods to shrine | 1248 | - |
-| shrine to woods | - | 226 |
+| village to woods | 1064 | 241 |
+| woods to village | 235 | - |
+| woods to shrine | 1249 | - |
+| shrine to woods | - | 236 |
 
 ## Other
 
-- Input latency (keydown to first movement): 44 ms
-- JS heap: 78 MB
+- Input latency (keydown to first movement): 37 ms
+- JS heap: 61 MB
 

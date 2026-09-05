@@ -26,19 +26,23 @@ Sampled over 240–300 frames per scene on a discrete GPU, before the release-ca
 A locked 60 fps in every scene, with no frame over 33 ms anywhere including the boss fight with projectiles,
 telegraphs and particles on screen. JS heap peaks around 100 MB.
 
-## Software WebGL (SwiftShader), 1920×1080, release candidate
+## Software WebGL (SwiftShader), 1920×1080, after the hands-on pass
 
 | Scene | Avg ms | p95 | p99 | Max | Frames > 33 ms |
 |---|---|---|---|---|---|
-| Main menu | 19.38 | 25.8 | 146.2 | 161.3 | 8 |
-| Village idle | 17.61 | 23.0 | 25.2 | 37.1 | 1 |
-| Village walking | 20.02 | 22.4 | 26.3 | 30.9 | 0 |
-| Woods idle | 19.83 | 24.9 | 26.6 | 27.7 | 0 |
-| Shrine idle | 18.14 | 21.4 | 23.7 | 35.1 | 2 |
+| Main menu | 16.6 | 18.5 | 25.1 | 33.7 | 1 |
+| Village idle | 17.28 | 21.2 | 26.0 | 28.0 | 0 |
+| Village walking | 20.2 | 25.2 | 27.6 | 38.1 | 1 |
+| Woods idle | 23.02 | 28.1 | 32.4 | 40.2 | 2 |
+| Shrine idle | 19.11 | 23.2 | 25.1 | 38.0 | 1 |
 
-Even the CPU rasteriser now holds close to 60 fps in the world scenes. The main-menu spikes are the title being
-rebuilt once the save slot finishes loading, about a hundred milliseconds after the sample starts; steady-state
-menu frames sit at 17–26 ms. This has not been re-measured on hardware since the vignette landed.
+Even the CPU rasteriser holds close to 60 fps in the world scenes. The main menu's p99 was 146 ms in the
+release-candidate table: that was the title downloading its own music and tilesets after the loading bar,
+fixed by loading them under the bar, and it now sits at 25 ms. Run-to-run variance on the rasteriser is a
+few milliseconds (woods idle read 19.8 ms in the release-candidate run and 23 ms in two later runs with no
+woods-specific change between them); a run taken right after another heavy suite reads several
+milliseconds worse across the board, so measure on a quiet machine. Not re-measured on hardware since the
+title vignette landed.
 
 ## Map transitions
 
@@ -88,9 +92,9 @@ player who dodges takes longer, one who cannot read the boss dies.
 |---|---|---|---|
 | 42 (original) | 4.4 s | 11 | 2 |
 | 84, with intro invulnerability, wind-up guard and counter | 9.5 s | 28 | 4 |
-| 140, shipped | 21.7 s | 48 | 13 |
+| 140, shipped | 18.7–21.7 s across runs | 46–48 | 11–13 |
 
-Thirteen hits is more than a player's eight health, so trading blows is no longer a strategy; the fight has to
+Eleven to thirteen hits is more than a player's eight health, so trading blows is no longer a strategy; the fight has to
 be played through its recovery windows, where one chain of about 7 damage every 3 s puts a careful player at
 roughly 80–120 s. Human playtesting remains the final arbiter of that estimate.
 
