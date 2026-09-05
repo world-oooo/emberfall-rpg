@@ -444,3 +444,47 @@ test('a finished game exported from the ending imports from the title and contin
   await expect.poll(async () => (await getSave(page)).flags?.['ending.relit_shrine']).toBe(true);
   expect((await getSave(page)).defeatedBosses?.includes('boss_racoon')).toBe(true);
 });
+
+test('a corrupt save slot does not brick the title: Continue is unavailable and New Game still works', async ({ page, errorWatcher }) => {
+  void errorWatcher;
+  await openGame(page);
+  await startNewGame(page);
+  await page.evaluate(() => window.__GAME_TEST__?.saveNow());
+
+  // Overwrite the slot with something that is not a save at all.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open("emberfall");
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction("saves", "readwrite");
+          tx.objectStore("saves").put({ saveVersion: 999, player: "not a player" }, "slot_1");
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+  );
+  await page.reload();
+  await waitForMainMenu(page);
+  await page.waitForTimeout(900);
+
+  // Continue is greyed out and skipped by the cursor; the menu itself still works.
+  expect(await menuSelection(page)).toBe("New Game");
+  await page.keyboard.press("ArrowDown");
+  await page.waitForTimeout(250);
+  expect(await menuSelection(page)).toBe("Options");
+  await page.keyboard.press("ArrowUp");
+  await page.waitForTimeout(250);
+
+  // New Game asks before replacing whatever is in the slot, then starts cleanly.
+  await menuActivate(page, "New Game");
+  await page.waitForTimeout(300);
+  await menuActivate(page, "Confirm");
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe("village");
+  expect((await getSave(page)).player.level).toBe(1);
+});
