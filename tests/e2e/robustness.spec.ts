@@ -225,3 +225,100 @@ test('the ending card\'s Continue Exploring returns control in the restored vill
   }
   expect((await getSave(page)).flags?.['ending.relit_shrine']).toBe(true);
 });
+
+test('rebinding a movement key works for walking, which reads held keys rather than presses', async ({ page, errorWatcher }) => {
+  void errorWatcher;
+  await openGame(page);
+  await startNewGame(page);
+  const start = await getPlayerState(page);
+
+  // Pause -> Controls -> Move Right -> listen -> O (a key nothing else owns; L would be refused as Throw's).
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await menuActivate(page, 'Controls');
+  await menuActivate(page, 'Move Right');
+  await page.keyboard.press('KeyO');
+  await page.waitForTimeout(400);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Escape');
+  await expect.poll(() => menuSelection(page)).toBeNull();
+  await page.waitForTimeout(300);
+
+  // O walks right now; D, which the rebind replaced, no longer does.
+  await page.keyboard.down('KeyO');
+  try {
+    await expect.poll(async () => (await getPlayerState(page)).x).toBeGreaterThan(start.x + 8);
+  } finally {
+    await page.keyboard.up('KeyO');
+  }
+  // Let the hero decelerate to a stop before measuring, or momentum reads as movement.
+  await page.waitForTimeout(400);
+  const mid = await getPlayerState(page);
+  await page.keyboard.down('KeyD');
+  await page.waitForTimeout(500);
+  await page.keyboard.up('KeyD');
+  expect(Math.abs((await getPlayerState(page)).x - mid.x)).toBeLessThan(2);
+});
+
+test('Reset Options restores the defaults', async ({ page, errorWatcher }) => {
+  void errorWatcher;
+  await openGame(page);
+  await startNewGame(page);
+  const defaults = await page.evaluate(() => window.__GAME_TEST__?.getSettings() ?? null);
+
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await menuActivate(page, 'Options');
+  // Master is the first row: lower it twice.
+  await page.keyboard.press('ArrowLeft');
+  await page.waitForTimeout(200);
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(() => page.evaluate(() => window.__GAME_TEST__?.getSettings().masterVolume)).toBeLessThan(defaults?.masterVolume ?? 1);
+  await menuActivate(page, 'Reset Options');
+  await menuActivate(page, 'Confirm');
+  await expect.poll(() => page.evaluate(() => window.__GAME_TEST__?.getSettings().masterVolume)).toBe(defaults?.masterVolume);
+});
+
+test('dying to the boss respawns at the checkpoint and the fight restarts fresh', async ({ page, errorWatcher }) => {
+  void errorWatcher;
+  test.setTimeout(180_000);
+  await openGame(page);
+  await startNewGame(page);
+  await talkTo(page, 152, 240);
+  await talkTo(page, 504, 208);
+  await teleport(page, 328, 472);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('woods');
+  for (const spawnId of ['slime_01', 'slime_02', 'slime_03', 'slime_04']) expect(await damageEnemy(page, spawnId)).toBe(true);
+  await teleport(page, 808, 80);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('shrine');
+  for (const spawnId of ['shrine_skeleton_01', 'shrine_skeleton_02', 'shrine_skeleton_03', 'shrine_skeleton_04', 'shrine_bat_01', 'shrine_bat_02', 'shrine_bat_03']) {
+    await damageEnemy(page, spawnId);
+  }
+  await interactAt(page, 120, 336);
+  await interactAt(page, 248, 256);
+  await expect.poll(async () => (await getSave(page)).flags?.['shrine.seal_open']).toBe(true);
+  const boss = async () => (await getEnemies(page)).find((enemy) => enemy.spawnId === 'guardian_tanuki') ?? null;
+  await teleport(page, 248, 176);
+  await expect.poll(async () => (await boss())?.state, { timeout: 20_000 }).toBe('idle');
+  // Take a real bite out of it, then die.
+  expect(await damageEnemy(page, 'guardian_tanuki', 30)).toBe(true);
+  await expect.poll(async () => (await boss())?.hp).toBeLessThan((await boss())?.maxHp ?? 0);
+  expect(await page.evaluate(() => window.__GAME_TEST__?.damagePlayer())).toBe(true);
+  await expect.poll(async () => (await getPlayerState(page)).hp).toBe(0);
+  await page.waitForTimeout(1500);
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await getPlayerState(page)).hp, { timeout: 15_000 }).toBeGreaterThan(0);
+  await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('shrine');
+  await page.waitForTimeout(600);
+
+  // Back in the arena: the Keeper is asleep again at full health and wakes for a fresh fight; the seal stays open.
+  expect((await getSave(page)).flags?.['shrine.seal_open']).toBe(true);
+  const fresh = await boss();
+  expect(fresh?.dead).toBe(false);
+  expect(fresh?.hp).toBe(fresh?.maxHp);
+  await teleport(page, 248, 176);
+  await expect.poll(async () => (await boss())?.state, { timeout: 20_000 }).toBe('idle');
+  const hero = await getPlayerState(page);
+  expect(hero.hp).toBe(hero.maxHp);
+});

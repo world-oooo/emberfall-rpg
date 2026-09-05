@@ -76,7 +76,9 @@ Played through the captures screen by screen as a player would, and fixed what r
   the screen, enemy AI, hitboxes and Arcade physics all hold; map transitions and the boss intro never use
   this path. Tests pause next to a slime and mid-boss-fight and check nothing moves, no damage lands, and
   everything resumes. The boss now reports its real state machine to the DEV bridge, which had shown "idle"
-  even while it charged.
+  even while it charged. The fix nearly shipped its own bug: Phaser restarts a scene on the same instance,
+  so the pause flag survived the game-over restart and every enemy stood frozen after a respawn. A test that
+  dies to the Keeper and returns for a fresh fight caught it.
 
 The in-app browser pane used for the first attempt reports `document.hidden`, so Chromium throttles it and
 Phaser pauses; that environment is unusable for judging feel, and the pass was done from Playwright captures.

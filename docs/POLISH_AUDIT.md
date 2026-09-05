@@ -90,7 +90,7 @@ import/export, fullscreen toggle and credits.
 
 ### P2 — QA
 
-Thirty-two end-to-end tests (two of them a synthetic gamepad, two for code-less keydowns, six for focus loss, mid-game resize, New Game reset, pausing beside an enemy and mid-boss, and the ending's Continue Exploring), 35 unit tests, map validation, a production-preview smoke, a three-engine
+Thirty-five end-to-end tests (two of them a synthetic gamepad, two for code-less keydowns, nine for focus loss, mid-game resize, New Game reset, pausing beside an enemy and mid-boss, the ending's Continue Exploring, movement rebinding, Reset Options and death to the boss), 35 unit tests, map validation, a production-preview smoke, a three-engine
 completion matrix, a scripted screenshot baseline, a scripted measurement pass and a boss fight measured with
 real attacks. See [TESTING.md](TESTING.md) and [RELEASE_AUDIT.md](RELEASE_AUDIT.md).
 

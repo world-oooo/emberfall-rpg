@@ -84,6 +84,9 @@ export class WorldScene extends Phaser.Scene {
     this.resumePosition = Boolean(data.resume && this.session.save.player.mapId === target.mapId);
     this.gameOver = false;
     this.bossMusicActive = false;
+    // A restart reuses this scene instance, so fields survive it. The game-over card leaves the simulation
+    // paused when it hands over to the retry; without this reset every enemy stood frozen after a respawn.
+    this.simulationPaused = false;
   }
 
   preload(): void {
