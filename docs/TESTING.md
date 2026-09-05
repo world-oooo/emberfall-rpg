@@ -9,7 +9,7 @@ scripted evidence passes for screenshots, viewport coverage and frame-time measu
 |---|---|
 | `npm run check` | Strict TypeScript, unit tests, generated-map validation |
 | `npm run build` | Production bundle; catches missing or misreferenced runtime assets |
-| `npm run test:e2e` | Twenty-six Playwright tests against the real WebGL canvas |
+| `npm run test:e2e` | Twenty-nine Playwright tests against the real WebGL canvas |
 | `npm run test:production` | Production build plus production-preview smoke test; asserts no development-only test bridge |
 | `npm run test:perf` | Measurement pass → `artifacts/measurements.md`, plus a boss fight with real attacks → `artifacts/boss-balance.md` |
 | `npm run test:shots` | Screenshot baseline → `artifacts/playthrough/*.png`, including the release-candidate menus at 1366×768 |
@@ -33,7 +33,7 @@ config allows a single retry.
 
 ## Browser suite
 
-Twenty-six tests, all of which fail on any unexpected console error or page error. Fifteen cover the game:
+Twenty-nine tests, all of which fail on any unexpected console error or page error. Fifteen cover the game:
 
 1. Boots to a WebGL canvas on the main menu.
 2. The canvas fills the browser window.
@@ -76,6 +76,13 @@ keyboards and remote desktops deliver them:
 
 25. A keydown carrying only `key` still moves the title cursor and confirms New Game.
 26. A keydown carrying only `keyCode` still confirms.
+
+Three cover things a player does that no feature test exercises (`robustness.spec.ts`):
+
+27. Losing window focus while a movement key is held stops the hero, and input recovers on the next press.
+28. Resizing the window mid-game (1024×600, 1920×1080, 1366×768) keeps the display sane and the hero
+    controllable.
+29. New Game over an existing save starts clean: 0 coins, level 1, and the grove chest is closed again.
 
 `npm run test:perf` additionally runs `boot-gap.spec.ts`, which reads two stamps the game emits
 (`bootPreloadComplete` → `bootMenuReady`) and asserts the title menu appears within a frame of the loading bar
