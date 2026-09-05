@@ -133,6 +133,12 @@ export class MainMenuScene extends Phaser.Scene {
     if (this.input2.pressed('confirm')) this.entries[this.index]?.action();
   }
 
+  /** Label of the highlighted row (release submenu if open, else the title entry), for DEV/test navigation. */
+  getSelectionLabel(): string | null {
+    if (this.releaseMenu?.active) return this.releaseMenu.selectionLabel;
+    return this.entries[this.index]?.label ?? null;
+  }
+
   private async loadContinueSlot(): Promise<void> {
     try {
       this.continueSave = await this.saves.load();

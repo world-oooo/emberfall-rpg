@@ -59,6 +59,13 @@ export class ReleaseMenu {
     return this.mode !== null;
   }
 
+  /** Label of the currently highlighted row, for DEV/test navigation. Null when closed. */
+  get selectionLabel(): string | null {
+    if (!this.mode) return null;
+    if (this.mode === 'credits') return 'Back';
+    return this.rows()[this.index]?.label ?? null;
+  }
+
   open(kind: ReleaseMenuKind): void {
     this.parentMode = kind;
     this.mode = kind;

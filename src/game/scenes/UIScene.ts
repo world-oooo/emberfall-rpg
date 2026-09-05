@@ -737,6 +737,11 @@ export class UIScene extends Phaser.Scene {
     this.panel = container;
   }
 
+  /** Label of the highlighted release-menu row, for DEV/test navigation. Null when no release menu is open. */
+  getMenuSelection(): string | null {
+    return this.releaseMenu?.active ? this.releaseMenu.selectionLabel : null;
+  }
+
   private openPause(): void {
     if (!hasSession()) return;
     this.closePanel(false);

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from './fixtures';
 import type { Page } from './fixtures';
-import { damageEnemy, getCurrentMap, getPlayerState, getSave, interactAt, openGame, startNewGame, talkTo, teleport, waitForMainMenu, waitForScene } from './helpers/game';
+import { damageEnemy, getCurrentMap, getPlayerState, getSave, interactAt, menuActivate, menuSelection, openGame, startNewGame, talkTo, teleport, waitForMainMenu, waitForScene } from './helpers/game';
 
 /**
  * Release-candidate surface: controls, save management, fullscreen, credits, the side quest and the ending
@@ -18,8 +18,14 @@ async function press(page: Page, key: string, settle = MENU_SETTLE): Promise<voi
   await page.waitForTimeout(settle);
 }
 
-async function pressTimes(page: Page, key: string, times: number, settle = 90): Promise<void> {
-  for (let i = 0; i < times; i += 1) await press(page, key, settle);
+/** Moves the highlight to a menu row by label without activating it (for rows whose action needs a live event). */
+async function selectRow(page: Page, label: string): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if ((await menuSelection(page)) === label) return;
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(160);
+  }
+  throw new Error(`Menu row "${label}" never highlighted (last: ${await menuSelection(page)})`);
 }
 
 async function activeScenes(page: Page): Promise<string[]> {
@@ -61,17 +67,6 @@ async function readSlot(page: Page): Promise<{ player?: { mapId?: string; level?
  * Menus drop a press that lands inside their 160 ms ready delay, and under a loaded CPU the previous page
  * switch can land late enough that a fixed settle is not enough. Press until the browser event arrives.
  */
-async function pressForDownload(page: Page, key = 'Enter'): Promise<import('@playwright/test').Download> {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const waiting = page.waitForEvent('download', { timeout: 2_500 }).catch(() => null);
-    await page.keyboard.press(key);
-    const value = await waiting;
-    if (value) return value;
-    await page.waitForTimeout(200);
-  }
-  throw new Error(`No download after pressing ${key}`);
-}
-
 async function pressForFileChooser(page: Page, key = 'Enter'): Promise<import('@playwright/test').FileChooser> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const waiting = page.waitForEvent('filechooser', { timeout: 2_500 }).catch(() => null);
@@ -113,17 +108,15 @@ test('rebinds attack from the pause controls screen, rejects a conflict, and kee
   expect(await seesAttackAfter(page, 'KeyJ', 74)).toBe(true);
   expect(await seesAttackAfter(page, 'KeyU', 85)).toBe(false);
 
-  // Pause → Controls → Attack (fifth row) → listen → K is owned by Roll and must be refused.
+  // Pause → Controls → Attack → listen → K is owned by Roll and must be refused.
   await press(page, 'Escape');
-  await pressTimes(page, 'ArrowDown', 2);
-  await press(page, 'Enter');
-  await pressTimes(page, 'ArrowDown', 4);
-  await press(page, 'Enter');
+  await menuActivate(page, 'Controls');
+  await menuActivate(page, 'Attack');
   await press(page, 'KeyK', 320);
   expect((await storedBindings(page))?.attack ?? null).toBeNull();
 
   // Same row again, bind U.
-  await press(page, 'Enter');
+  await menuActivate(page, 'Attack');
   await press(page, 'KeyU', 320);
   await expect.poll(async () => (await storedBindings(page))?.attack).toEqual(['KeyU']);
 
@@ -139,8 +132,7 @@ test('rebinds attack from the pause controls screen, rejects a conflict, and kee
   await page.reload();
   await waitForMainMenu(page);
   await page.waitForTimeout(700);
-  await press(page, 'ArrowDown');
-  await press(page, 'Enter');
+  await menuActivate(page, 'Continue');
   await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('village');
   await page.waitForTimeout(400);
   expect((await storedBindings(page))?.attack).toEqual(['KeyU']);
@@ -158,17 +150,14 @@ test('saves and quits to the title, then Continue resumes the same journey', asy
   await teleport(page, 200, 300);
   await page.waitForTimeout(200);
 
-  // Pause → Save & Quit (fifth row).
   await press(page, 'Escape');
-  await pressTimes(page, 'ArrowDown', 4);
-  await press(page, 'Enter');
+  await menuActivate(page, 'Save & Quit');
   await waitForMainMenu(page);
   await expect.poll(() => activeScenes(page)).toEqual(['MainMenuScene']);
   await expect.poll(async () => (await readSlot(page))?.player?.coins).toBe(50);
 
   await page.waitForTimeout(700);
-  await press(page, 'ArrowDown');
-  await press(page, 'Enter');
+  await menuActivate(page, 'Continue');
   await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('village');
   const state = await getPlayerState(page);
   expect(Math.abs(state.x - 200)).toBeLessThan(12);
@@ -185,11 +174,13 @@ test('exports the save as a download and imports a validated file from the title
   await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('woods');
   await page.evaluate(() => window.__GAME_TEST__?.saveNow());
 
-  // Pause → Save Data → Export Save.
+  // Pause → Save Data → Export Save. Arm the download listener before the Enter that triggers it.
   await press(page, 'Escape');
-  await pressTimes(page, 'ArrowDown', 3);
-  await press(page, 'Enter');
-  const download = await pressForDownload(page);
+  await menuActivate(page, 'Save Data');
+  await selectRow(page, 'Export Save');
+  const downloadPromise = page.waitForEvent('download', { timeout: 10_000 });
+  await page.keyboard.press('Enter');
+  const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe('emberfall-save.json');
   const path = await download.path();
   expect(path).not.toBeNull();
@@ -198,37 +189,31 @@ test('exports the save as a download and imports a validated file from the title
 
   // Back to the title through Save & Quit, then import a modified copy from Options → Save Data → Import.
   await press(page, 'Escape');
-  await press(page, 'ArrowUp');
-  await press(page, 'Enter');
+  await menuActivate(page, 'Save & Quit');
   await waitForMainMenu(page);
   await page.waitForTimeout(700);
 
   const modified = { ...exported, player: { ...exported.player, level: 4 } };
-  await pressTimes(page, 'ArrowDown', 2); // Continue exists, so Options is the third row
-  await press(page, 'Enter');
-  await pressTimes(page, 'ArrowDown', 8);
-  await press(page, 'Enter'); // Save Data
-  await press(page, 'ArrowDown'); // Import Save
+  await menuActivate(page, 'Options');
+  await menuActivate(page, 'Save Data');
+  // The file chooser opens when the Import row is activated; highlight it, then trigger the picker.
+  await selectRow(page, 'Import Save');
   const chooser = await pressForFileChooser(page);
   await chooser.setFiles({ name: 'emberfall-save.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(modified)) });
-  // Confirmation defaults to Cancel; move to Confirm.
-  await page.waitForTimeout(400);
-  await press(page, 'ArrowDown');
-  await press(page, 'Enter');
+  await menuActivate(page, 'Confirm');
   await expect.poll(async () => (await readSlot(page))?.player?.level).toBe(4);
 
   // A broken file must be refused before it can touch the slot.
-  await press(page, 'ArrowDown');
+  await selectRow(page, 'Import Save');
   const chooser2 = await pressForFileChooser(page);
   await chooser2.setFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{"saveVersion":') });
   await page.waitForTimeout(500);
   expect((await readSlot(page))?.player?.level).toBe(4);
 
-  // The imported save is what Continue loads. The title cursor is still on Options, one row below Continue.
-  await pressTimes(page, 'Escape', 3);
-  await page.waitForTimeout(300);
-  await press(page, 'ArrowUp');
-  await press(page, 'Enter');
+  // The imported save is what Continue loads.
+  await press(page, 'Escape');
+  await press(page, 'Escape', 300);
+  await menuActivate(page, 'Continue');
   await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('woods');
   expect((await getSave(page)).player.level).toBe(4);
 });
@@ -239,9 +224,8 @@ test('toggles fullscreen from options without breaking the display, and falls ba
   await openGame(page);
   await startNewGame(page);
   await press(page, 'Escape');
-  await press(page, 'ArrowDown');
-  await press(page, 'Enter'); // Options
-  await pressTimes(page, 'ArrowDown', 6); // Fullscreen
+  await menuActivate(page, 'Options');
+  await selectRow(page, 'Fullscreen');
   await press(page, 'Enter', 600);
 
   const state = await page.evaluate(() => ({
@@ -256,8 +240,15 @@ test('toggles fullscreen from options without breaking the display, and falls ba
 
   await press(page, 'Enter', 600);
   expect(await page.evaluate(() => document.fullscreenElement)).toBeNull();
-  await press(page, 'Escape');
-  await press(page, 'Escape', 400);
+  // Back out of Options and the pause menu; the release menu is closed once nothing is highlighted.
+  await expect
+    .poll(async () => {
+      if ((await menuSelection(page)) === null) return null;
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(220);
+      return menuSelection(page);
+    })
+    .toBeNull();
   await expect.poll(async () => (await getPlayerState(page)).state).not.toBe('interact');
 });
 
@@ -267,11 +258,9 @@ test('opens credits from the title and returns to a working menu', async ({ page
   await openGame(page);
   await waitForMainMenu(page);
   await page.waitForTimeout(700);
-  await pressTimes(page, 'ArrowDown', 3); // New Game → Options → Controls → Credits (no save, so Continue is skipped)
-  await press(page, 'Enter', 500);
+  await menuActivate(page, 'Credits');
   await press(page, 'Escape', 400);
-  await pressTimes(page, 'ArrowUp', 3);
-  await press(page, 'Enter');
+  await menuActivate(page, 'New Game');
   await expect.poll(() => getCurrentMap(page), MAP_LOAD).toBe('village');
 });
 

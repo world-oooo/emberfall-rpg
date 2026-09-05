@@ -56,6 +56,7 @@ declare global {
       damagePlayer: (amount?: number) => boolean;
       healPlayer: (amount?: number) => boolean;
       saveNow: () => Promise<void>;
+      getMenuSelection: () => string | null;
     };
   }
 }
@@ -161,4 +162,27 @@ export async function interactAt(page: Page, x: number, y: number, facing = 'Arr
     return target;
   }
   return null;
+}
+
+/** Reads which menu row is currently highlighted (title entry or open release submenu). */
+export async function menuSelection(page: Page): Promise<string | null> {
+  return page.evaluate(() => window.__GAME_TEST__?.getMenuSelection() ?? null);
+}
+
+/**
+ * Moves the highlight to a row by its label and presses to activate it — how a sighted player navigates,
+ * instead of counting arrow presses, which drifts when a slow runner drops or reorders taps.
+ */
+export async function menuActivate(page: Page, label: string, direction: 'ArrowDown' | 'ArrowUp' = 'ArrowDown'): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const current = await menuSelection(page);
+    if (current === label) {
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(250);
+      return;
+    }
+    await page.keyboard.press(direction);
+    await page.waitForTimeout(160);
+  }
+  throw new Error(`Menu row "${label}" never highlighted (last: ${await menuSelection(page)})`);
 }

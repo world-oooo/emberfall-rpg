@@ -27,6 +27,7 @@ export interface GameTestBridge {
   damagePlayer: (amount?: number) => boolean;
   healPlayer: (amount?: number) => boolean;
   saveNow: () => Promise<void>;
+  getMenuSelection: () => string | null;
 }
 
 export function installTestBridge(game: Phaser.Game): void {
@@ -61,6 +62,13 @@ export function installTestBridge(game: Phaser.Game): void {
       state: enemy.stateName,
     })) ?? [],
     getActiveInteraction: () => world()?.interactions?.getActive()?.id ?? null,
+    getMenuSelection: () => {
+      const menu = game.scene.getScene('MainMenuScene') as { getSelectionLabel?: () => string | null } | null;
+      if (menu && game.scene.isActive('MainMenuScene')) return menu.getSelectionLabel?.() ?? null;
+      const ui = game.scene.getScene('UIScene') as { getMenuSelection?: () => string | null } | null;
+      if (ui && game.scene.isActive('UIScene')) return ui.getMenuSelection?.() ?? null;
+      return null;
+    },
     startScene: (key, data) => game.scene.start(key, data),
     teleport: (x, y) => {
       const current = world();
