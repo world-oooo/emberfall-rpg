@@ -90,7 +90,7 @@ import/export, fullscreen toggle and credits.
 
 ### P2 — QA
 
-Twenty-two end-to-end tests, 35 unit tests, map validation, a production-preview smoke, a three-engine
+Twenty-four end-to-end tests (two of them a synthetic gamepad), 35 unit tests, map validation, a production-preview smoke, a three-engine
 completion matrix, a scripted screenshot baseline, a scripted measurement pass and a boss fight measured with
 real attacks. See [TESTING.md](TESTING.md) and [RELEASE_AUDIT.md](RELEASE_AUDIT.md).
 

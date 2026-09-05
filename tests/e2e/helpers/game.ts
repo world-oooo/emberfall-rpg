@@ -57,6 +57,7 @@ declare global {
       healPlayer: (amount?: number) => boolean;
       saveNow: () => Promise<void>;
       getMenuSelection: () => string | null;
+      getActiveDevice: () => 'keyboard' | 'gamepad';
     };
   }
 }

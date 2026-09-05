@@ -37,5 +37,6 @@
 - One environmental puzzle in the whole game (the shrine braziers).
 - Boss balance was measured with a mashing bot, not with human playtesters; the design target of 90–150 s for
   a careful player is an estimate from that floor.
-- The controls menu rebinds keyboard actions only; gamepad bindings use the built-in prompt/action layout.
+- The controls menu rebinds keyboard actions only; gamepad uses a fixed standard-mapping layout (verified with
+  a synthetic pad; real controller hardware is untested in CI).
 - Save import/export is local JSON only; there is no cloud account or backend sync.

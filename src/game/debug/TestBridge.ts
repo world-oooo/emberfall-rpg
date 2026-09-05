@@ -3,6 +3,7 @@ import { hasSession, getSession } from '../core/session';
 import type { WorldScene } from '../scenes/WorldScene';
 import { SettingsStore, type Settings } from '../systems/SettingsStore';
 import { Display, type DisplayLayout } from '../systems/DisplaySystem';
+import { inputBindingStore } from '../input/InputBindingStore';
 
 /**
  * DEV-only read-mostly API for Playwright: window.__GAME_TEST__.
@@ -28,6 +29,7 @@ export interface GameTestBridge {
   healPlayer: (amount?: number) => boolean;
   saveNow: () => Promise<void>;
   getMenuSelection: () => string | null;
+  getActiveDevice: () => 'keyboard' | 'gamepad';
 }
 
 export function installTestBridge(game: Phaser.Game): void {
@@ -69,6 +71,7 @@ export function installTestBridge(game: Phaser.Game): void {
       if (ui && game.scene.isActive('UIScene')) return ui.getMenuSelection?.() ?? null;
       return null;
     },
+    getActiveDevice: () => inputBindingStore.getActiveDevice(),
     startScene: (key, data) => game.scene.start(key, data),
     teleport: (x, y) => {
       const current = world();

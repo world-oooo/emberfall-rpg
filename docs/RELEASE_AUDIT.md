@@ -15,7 +15,7 @@ Environment: Windows 11, Node 24.15.0, npm 11.12.1 (engines >= 22.12.0; CI runs 
 | Unit | Pass, 35 tests in 7 files |
 | Map validation | Pass, village / woods / shrine, reachability through seal gates |
 | Build | Pass, 153 kB game JS (46.7 kB gzip), 1.37 MB Phaser |
-| Chromium E2E | Pass, 22 tests on the dev server (15 game, 7 release surface), green under a 6x CPU throttle |
+| Chromium E2E | Pass, 24 tests on the dev server (15 game, 7 release surface, 2 gamepad), green under a 6x CPU throttle |
 | Production preview | Pass: `vite preview` of the build, canvas drawn, `window.__GAME_TEST__` absent, no failed requests, no console errors, walk village → woods, reload, Continue, walk back |
 | WebKit | Completion run at 1366×768, 1440×900 and 1920×1080 (see Browser) |
 | Firefox | Completion run at 1366×768, 1440×900 and 1920×1080 (see Browser) |
@@ -28,8 +28,11 @@ Environment: Windows 11, Node 24.15.0, npm 11.12.1 (engines >= 22.12.0; CI runs 
 
 Keyboard: verified. The whole game completes on keyboard alone in the acceptance matrix; every menu is driven
 by keyboard in the release tests.
-Gamepad: implemented (A attack, B roll, X interact, Y throw, Menu pause, View inventory, LB quests, D-pad
-navigation) with prompts that switch to the active device. Not verified with hardware in this environment.
+Gamepad: verified with a synthetic standard-mapping pad injected over navigator.getGamepads (Phaser polls it
+every frame). Tests cover D-pad title navigation, A to confirm Continue, left-stick movement in the world,
+Menu to open pause, D-pad through the pause rows, and the active-device flip to gamepad; glyph mapping
+(A/B/X/Y vs keyboard) is unit-tested. Real controller hardware is still not exercised in this environment,
+but the full input path from a standard pad is.
 Rebinding: verified. Eleven actions, conflict refused with the owning action named, reserved browser keys
 refused, Escape always pauses/cancels and Enter always confirms, bindings persist outside the save and survive
 a reload; the rebound key was exercised in play.
@@ -87,7 +90,7 @@ P1: none open. Fixed this pass: boss trivialised by mashing; side-quest reward w
 out of reach at 120 (now 80); Controls page printed raw key codes and wrapped a row onto the next; the ending
 card re-armed a 400 ms input lockout on every cursor move.
 
-P2: gamepad and granted-fullscreen paths not exercised by hardware here; boss balance estimate rests on a bot
+P2: real controller hardware and the granted-fullscreen path not exercised here (the synthetic-pad path is); boss balance estimate rests on a bot
 floor rather than human playtesting; the title's main-menu frame spikes under the software rasteriser are the
 one-time rebuild after the save slot loads and were not re-measured on hardware.
 
